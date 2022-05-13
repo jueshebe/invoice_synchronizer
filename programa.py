@@ -323,7 +323,7 @@ class Siigo():
                     return False #no se puede crear porque ya existe
                 
                 elif response.json()["Errors"][0]["Code"] == "duplicated_document":
-                    _ = self.obtenerClientes()#para relizar otra peticion y ayudar al sistema
+                    #para relizar otra peticion y ayudar al sistema
                     self.enviarFacturaPrueba()
                     print("duplicated_document error. try to send it again")
                     time.sleep(0.8)
@@ -382,14 +382,9 @@ class Siigo():
             mask = join2["No. Factura"] == facturai
             #revisa si es factura POS o Electronica
             tipoComprobante = None
-            if "." in facturai:
-                #es factura POS
-                numeroFactura = facturai.replace(".","")
-                tipoComprobante = "POS"
-                
-            else:
-                numeroFactura = facturai
-                tipoComprobante = "FE"
+            prefijoIdentificado, numeroFactura = utils._revisarFactura(facturai,[".","LL"])# dejar estas variables globales en todo el programa ###########
+            tipoComprobante = "POS" if prefijoIdentificado=="LL" else "FE"
+           
             
             #de todo el dataframe obtiene solo los datos de la factura de interes
             datosFacturai = join2[mask]
@@ -488,12 +483,6 @@ class Siigo():
         
         print("\n###########################\nFin Envio Masivo de facturas\n###########################\n")
 
-    # def join(self):
-        
-    #     join1= self.ventasPProducto.merge(self.productos, left_on='Producto', right_on='Nombre', how='left')
-    #     join2 = pd.merge(join1,self.ventasPCliente,left_on='No. Factura', right_on='Factura No.', how='right')
-        
-    #     return join2
 
 
 if __name__ == "__main__":
@@ -501,11 +490,11 @@ if __name__ == "__main__":
     #create the connector
     siigoConnector = Siigo()
     
-    siigoConnector.actualizarClientes()
+    # siigoConnector.actualizarClientes()
     
-    
-    # siigoConnector.enviarFacturaPrueba()
-    # siigoConnector.enviarFacturas(0)
+    #agregar codigo para verificar si todos los productos existen antes de enviarlos 
+    #revisar que las uniones no dejen datos importantes en none 
+    siigoConnector.enviarFacturas()
     #809
     # siigoConnector.enviarFacturas(0)
     # siigoConnector.enviarFacturas(0,[700])
