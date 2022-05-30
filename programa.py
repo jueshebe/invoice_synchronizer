@@ -396,15 +396,10 @@ class Siigo():
             
             #obtiene informacion del cliente
             documentoCliente = datosFacturai.loc[0,"Documento"]
-            # print(documentoCliente)
             # print(type(documentoCliente))
             try:
-                if type(documentoCliente)== float or type(documentoCliente)== int:
-                    if math.isnan(documentoCliente) == True: # ahora pirpos no pone documento de consumidor final
-                        documentoCliente = 222222222222	
+                documentoCliente = utils.clean_document(documentoCliente)
                     
-                if type(documentoCliente) == str:
-                    documentoCliente = int(documentoCliente.replace(" ",""))
             except:
                 print("fila {0} factura {1} {2} genera problema por documento de cliente".format(fila, tipoComprobante,numeroFactura ))
                 erroresBackUp.append("\nfila {0} factura {1} {2} genera problema por documento de cliente\n".format(fila, tipoComprobante,numeroFactura ))
@@ -494,10 +489,12 @@ if __name__ == "__main__":
     
     #agregar codigo para verificar si todos los productos existen antes de enviarlos 
     #revisar que las uniones no dejen datos importantes en none 
-    siigoConnector.enviarFacturas()
+    #mejorar print de las facturas creadas 
+    #mejorar el reenvio de facturas con errores (posiblemente se debe cambiar como se imprima el error en el .txt)
+    # siigoConnector.enviarFacturas()
     #809
     # siigoConnector.enviarFacturas(0)
-    # siigoConnector.enviarFacturas(0,[700])
+    siigoConnector.enviarFacturas(0,[3170,3425,3426,3427,3428,3731,3733])
    
     #700
     

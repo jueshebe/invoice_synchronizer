@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+import math
 class utils():
     
     @staticmethod
@@ -234,5 +235,17 @@ class utils():
         )
         for a, b in replacements:
             s = s.replace(a, b).replace(a.upper(), b.upper())
-        return s    
-
+        return s   
+    
+    @staticmethod
+    def clean_document(documentoCliente:str)->int:
+                       
+        if type(documentoCliente)== float or type(documentoCliente)== int:
+            if math.isnan(documentoCliente) == True: # ahora pirpos no pone documento de consumidor final
+                documentoCliente = 222222222222	
+        
+        if type(documentoCliente) == str:
+            documentoCliente = documentoCliente.replace(" ","")
+            if "-" in documentoCliente:
+                documentoCliente = int(documentoCliente[:documentoCliente.find("-")])
+        return documentoCliente
