@@ -14,24 +14,25 @@ class Siigo():
         self._userName = userName
         self._access_key = access_key
         self._access_token = None
-        self._updateAccess_token()
+        # self._updateAccess_token()
         
         #datos
-        
+        modificarNumeroFactura = True
+        numeracionInicial = (16259,0)
         #productos
-        self._productos = utils.prepararArchivo(pd.read_excel("./archivos/ProductosPirpos.xlsx"),0)
+        self._productos = utils.prepararArchivo(pd.read_excel("./archivos/Listado de productos _ Servicios.xlsx"),0,modificarNumeroFactura,numeracionInicial)
         
         #clientes Pirpos
-        self._clientesPirPos = utils.prepararArchivo(pd.read_html("./archivos/clientes.xls")[0],1)
+        self._clientesPirPos = utils.prepararArchivo(pd.read_html("./archivos/clientes.xls")[0],1,modificarNumeroFactura,numeracionInicial)
         
         #ventas por producto
-        self._ventasPProducto = utils.prepararArchivo(pd.read_html("./archivos/reporte-productos.xls")[0],2)
+        self._ventasPProducto = utils.prepararArchivo(pd.read_html("./archivos/reporte-productos.xls")[0],2,modificarNumeroFactura,numeracionInicial)
         
         #ventas por cliente
-        self._ventasPCliente = utils.prepararArchivo(pd.read_html("./archivos/reporte-facturas.xls")[0],3)
+        self._ventasPCliente = utils.prepararArchivo(pd.read_html("./archivos/reporte-facturas.xls")[0],3,modificarNumeroFactura,numeracionInicial)
         
         #ventas por cliente Siigo
-        self._clientesSiigo = utils.prepararArchivo(pd.read_excel("./archivos/Clientes.xlsx"),4)
+        self._clientesSiigo = utils.prepararArchivo(pd.read_excel("./archivos/Clientes.xlsx"),4,modificarNumeroFactura,numeracionInicial)
         
         #relacion PirPos Siigo
         #formas de pago
@@ -45,8 +46,8 @@ class Siigo():
         self._errores = False
         
         
-        #revision de exceles antes de actualizar cosas 
-        utils.revisarVentas(self._ventasPCliente, self._ventasPProducto)
+        #revision de archivos para eliminar errores 
+        self.a,self.b=utils.revisarDocumentos(self._productos,self._clientesSiigo, self._ventasPProducto,self._ventasPCliente)
         
         
     
@@ -104,68 +105,51 @@ class Siigo():
     
     def actualizarClientes(self):
         """
-        Actualiza los clientes en siigo
-
-        Returns
-        -------
-        None.
+        Actualiza los clientes en siigo mostrando la barra de progeso 
+        en el archivo ./errores/errores_clientes.json se guardan los errores
 
         """
         
         
         print("\n###########################\nActualizacion de clientes\n###########################\n")
         #errores Para imprimirlos en txt
-        erroresBackUp =["Errores registrados en la actualizacion de clientes\n"]
+        erroresBackUp = {}
+        contador_errores = 0
+        
         #obtener clientes de siigo
         clientesRegistradosSiigo = self._clientesSiigo
         identificacionesSiigo = clientesRegistradosSiigo.iloc[:,0]
-        # print(keys)
         #itera en todos los clientes de PirPos
         size = len(self._clientesPirPos)
-        # print(self.clientesPirPos)
         for idx in range(size):
             utils.printProgressBar(idx,size-1)
             identificacion = self._clientesPirPos.loc[idx,"Documento"]
             nombre = self._clientesPirPos.loc[idx,"Nombre"]
-            # print(nombre)
-            if type(identificacion) == str:#get identification as a int object
-                
-                try:       
-                    identificacion = int(identificacion.replace(" ",""))
-                except:
-                    info = "Revisar identificacion {0} en la fila {1} en el archivo de clientes clientes.xls\n".format(identificacion, idx+2)
-                    # print(info)
-                    erroresBackUp.append(info)
-                    self._errores = True
-                    continue
-                
-            if identificacion in identificacionesSiigo.values:
-                # print("cliente con identificacion {0} ya existe".format(identificacion))
-                pass
-            else:
+            
+            try:       
+                identificacion =utils.clean_document(identificacion)
+            except:
+                contador_errores+=1
+                erroresBackUp[contador_errores] = {"nombre_cliente":nombre, "identificacion":identificacion, "fila":  idx+2, "error":"falla al convertir a entero"}
+                self._errores = True
+                continue
+            
+            if (identificacion in identificacionesSiigo.values) == False:
                 #se crea cliente
                 try:
                     result = self.crearCliente(identificacion,nombre)
-                    if result == True:
-                        # print("cliente con identificacion {0} creado".format(identificacion))
-                        pass
-                    else:
-                        # print("cliente con identificacion {0} ya existe".format(identificacion))
-                        pass
                 except Exception as e:
-                    # print()
-                    # print(e)
-                    # print()
-                    erroresBackUp.append(str(e))
+                    contador_errores+=1
+                    erroresBackUp[contador_errores] = {"nombre_cliente":nombre, "identificacion":identificacion, "fila":  idx+2, "error":str(e)}
                     self._errores = True
                     
-        with open("./errores/errores Clientes.txt", "w") as txt_file:
-            for line in erroresBackUp:
-                txt_file.write(line+ "\n")
+        with open("./errores/errores_clientes.json", "w") as json_file:
+            json.dump(erroresBackUp, json_file, indent = 6)
+                
         print("\n###########################\nFin Actualizacion de clientes\n###########################\n")
     
         
-    def crearCliente(self,identificacion:int,nombre:str):
+    def crearCliente(self,identificacion:int,nombre:str)-> bool:
         """
         Crea la solicitud para hacer un cliente en Siigo
 
@@ -188,7 +172,7 @@ class Siigo():
 
         """
         #revisar que el cliente tenga datos en la columna documento
-        nombre = utils.normalize(nombre)
+        nombre = utils.normalize(nombre)#elimina caracteres que no procesa siigo
         largo = len(nombre)
         if largo >100:
             nombre = nombre[0:100]
@@ -247,8 +231,7 @@ class Siigo():
             if response.json()["Errors"][0]["Code"] == "already_exists":
                 return False
             else:
-                info = "cliente {0} genera error: ".format(identificacion) + response.json()["Errors"][0]["Code"]
-                raise Exception(info)    
+                raise Exception(str(response.json()["Errors"][0]))    
         return True
     
     
@@ -482,6 +465,12 @@ class Siigo():
 
 if __name__ == "__main__":
      
+    ##tareas
+    ## crear json de errores para crear facturas como se hizo para la creacion de clientes
+    #crear yml para cargar datos de configuracion como prefijos, token, usuario, numeraciones iniciales etc. 
+    #modificar fucnion de crear facturas para que pueda cargar el json de errores y volver a intentar a crear las facturas automaticamnete. 
+    #hacer que se imprima la barra de progreso apra la creacion de clientes 
+    
     #create the connector
     siigoConnector = Siigo()
     
@@ -494,7 +483,7 @@ if __name__ == "__main__":
     # siigoConnector.enviarFacturas()
     #809
     # siigoConnector.enviarFacturas(0)
-    siigoConnector.enviarFacturas(0,[3170,3425,3426,3427,3428,3731,3733])
+    # siigoConnector.enviarFacturas(0,[3170,3425,3426,3427,3428,3731,3733])
    
     #700
     

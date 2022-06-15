@@ -1,10 +1,11 @@
 import pandas as pd
 import re
 import math
+import numpy as np
 class utils():
     
     @staticmethod
-    def prepararArchivo(file:pd, tipoArchivo:int, modificarNumeroFactura:bool=False, numeracionInicial:(int,int)=(0,0))->pd: 
+    def prepararArchivo(file:pd, tipoArchivo:int, modificarNumeracionFactura:bool=False, numeracionInicial:(int,int)=(0,0))->pd: 
         """
         Prepara los archivos para que puedan leerse adecuadamente
 
@@ -18,10 +19,10 @@ class utils():
             2=archivo de clientes (read_html)
             3=archivo de ventas por producto (read_html)
             4=archivo de ventas por cliente (read_html)
-        modificarNumeroFactura: bool
+        modificarNumeracionFactura: bool
             Modificar la numeracion de las facturas en orden creciente. 
         numeracionInicial: (int,int)
-            numeracion que debe seguir la primer factura POS y electronica
+            numeracion en el que debe empezar la primera factura POS y electronica
             
         Returns
         ----------
@@ -30,8 +31,13 @@ class utils():
 
         """
         
-        if tipoArchivo == 0:#archivo de productos
-            file["Nombre"] = file["Nombre"].str.lower()
+        if tipoArchivo == 0:#archivo de productos siigo
+            encabezados = file.iloc[5,:]
+            file = file.drop(labels=[0,1,2,3,4,5,len(file)-1],axis=0)
+            file = file.reset_index(drop=True)
+            file.columns = encabezados
+            file = file.dropna(subset=['Código'],axis=0)
+            file["Nombre"] = file["Nombre"].apply(utils.prepare_product_name)
             
         elif tipoArchivo == 1:#archivo de clientes PirPos
             encabezados = file.iloc[0,:]
@@ -48,8 +54,10 @@ class utils():
             file["Total"] = file["Total"].str.replace('.','',regex=True)
             file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
             file["Cantidad"] = pd.to_numeric(file["Cantidad"], downcast="float")
-            file["Producto"] = file["Producto"].str.lower()
-            file = utils._cambiarNumeracion(file,numeracionInicial)
+            file["Producto"] = file["Producto"].apply(utils.prepare_product_name)
+            
+            if modificarNumeracionFactura == True:
+                file = utils._cambiarNumeracion(file,numeracionInicial)
             
         elif tipoArchivo == 3:#archivo ventas por cliente
             encabezados = file.iloc[1,:]
@@ -60,7 +68,10 @@ class utils():
             file["Total"] = file["Total"].str.replace(',','',regex=True)
             file["Total"] = file["Total"].str.replace('.','',regex=True)
             file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
-            file = utils._cambiarNumeracion(file,numeracionInicial)
+            file["Documento"] = file["Documento"].apply(utils.clean_document)
+            
+            if modificarNumeracionFactura == True:
+                file = utils._cambiarNumeracion(file,numeracionInicial)
             
         else: #archivo clientes Siigo
             encabezados = file.iloc[5,:]
@@ -85,6 +96,7 @@ class utils():
             
         numeracionInicial : (int,int)
             tupla con las numeraciones iniciales que se desean para las facturas 
+            (numeracio_inicial_POS, numeracion_inicial_Elect)
         
         Returns
         -------
@@ -98,7 +110,7 @@ class utils():
         nombreColumna = nombresColumnas[0] if nombresColumnas[0] in file.columns else nombresColumnas[1]
         
         #definir que es una factura POS 
-        prefijosPOS = [".","LL"]## esto puede que se tenga que dejar dinamico ------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        prefijosPOS = [".","LL"]##------------------------------------------------- parametros que se pueden dejar en un yml
         
         
         #recorrer cada factura, identificar el tipo de factura y modificar consecutivo si es necesario 
@@ -109,8 +121,8 @@ class utils():
         facturaAnteriorPos = numeracionInicial[0]-1#ajustar numeracion inicial
         facturaAnteriorElectronica = numeracionInicial[1]-1#ajustar numeracion inicial
         
-        for i in range(filas):
-           facturai = file.loc[i,nombreColumna]  
+        for fila in range(filas):
+           facturai = file.loc[fila,nombreColumna]  
            prefijo,numeroFactura = utils._revisarFactura(facturai,prefijosPOS)#obtiene tipo y numero de factura
            
            if prefijo == "LL":
@@ -121,19 +133,16 @@ class utils():
                    if numeroFactura > facturaSiguientePos:
                        facturaSiguientePos = numeroFactura
                    facturaSiguientePos+=1 #actualiza factura sigueinte                   
-               file.loc[i,nombreColumna] = "{0}{1}".format(prefijo,facturaSiguientePos-1)#actualiza prefijo y numero de factura 
+               file.loc[fila,nombreColumna] = "{0}{1}".format(prefijo,facturaSiguientePos-1)#actualiza prefijo y numero de factura 
            else:
                if numeroFactura != facturaAnteriorElectronica:
                    facturaAnteriorElectronica = numeroFactura
-                   # print("entra")
-                   # print(facturaSiguientePos)
-                   # print(numeroFactura)
                    if numeroFactura < facturaSiguienteElectronica:
                        numeroFactura = facturaSiguienteElectronica#actualiza numeracion incorrecta Electronica
                    if numeroFactura > facturaSiguienteElectronica:
                        facturaSiguienteElectronica = numeroFactura
                    facturaSiguienteElectronica+=1 #actualiza factura sigueinte
-               file.loc[i,nombreColumna] = "{0}{1}".format(prefijo,facturaSiguienteElectronica-1)#actualiza prefijo y numero de factura 
+               file.loc[fila,nombreColumna] = "{0}{1}".format(prefijo,facturaSiguienteElectronica-1)#actualiza prefijo y numero de factura 
                    
            
         return file #archio con la numeracion correcta 
@@ -146,6 +155,8 @@ class utils():
         ----------
         factura : str
             string con el numero de factura y el prefijo.
+        prefijosPOS: [str,str]
+            prefijos asociados a una factura POS, todo lo que no se encuentre aca sera tomado en cuenta como factura electronica
 
         Returns
         -------
@@ -156,9 +167,9 @@ class utils():
         #identificar tipo de factura 
         prefijoIdentificado = None
         if  sum([True if prefijo in factura else False for prefijo in prefijosPOS]) >0:
-            prefijoIdentificado = "LL"#el prefijo es POS
+            prefijoIdentificado = "LL"#el prefijo es POS ---------------------------------parametro que se puede dejar en un yml
         else:
-            prefijoIdentificado = "" #factura electronica 
+            prefijoIdentificado = "" #factura electronica -----------------------------------se puede dejar en un yml
         
         #se obtiene el numero de la factura 
         numero = int("".join([caracter if caracter.isdigit() else "" for caracter in factura]))
@@ -167,9 +178,9 @@ class utils():
         
 
     @staticmethod
-    def revisarVentas(ventasPCliente:pd,ventasPProducto:pd):
+    def revisarDocumentos(productos,clientesSiigo,ventasPProducto,ventasPCliente):
         """
-        Revisa que los archvios de venta por productos concuerde con el de ventas por cliente
+        Revisa que los archvios tengan la informacion adecuada 
 
         Parameters
         ----------
@@ -186,6 +197,32 @@ class utils():
         if ventasPCliente.sum()["Total"]!= ventasPProducto.sum()["Total"]:
             raise(Exception("Las ventas por productos no coinciden con las ventas por facturas."))
         
+        
+        #unir tablas y verificar que los merge no genenren datos vacíos 
+        merged_clientes=ventasPCliente.merge(clientesSiigo, left_on='Documento', right_on='Identificación', how='left')
+        missing_customers = merged_clientes.loc[merged_clientes["Identificación"].isna(),["Cliente","Documento"]]
+        missing_customers = missing_customers.groupby("Cliente").agg(["unique"])
+        missing_customers["Cliente"] = missing_customers.index
+        missing_customers = missing_customers.reset_index(drop=True)
+        
+        merged_productos=ventasPProducto.merge(productos, left_on='Producto', right_on='Nombre', how='left')
+        missing_products = merged_productos.loc[merged_productos["Nombre"].isna(),"Producto"].unique()
+        
+        message = ""
+        if missing_customers.shape[0] > 0:
+            message = message + "\nSiigo no posee los siguientes clientes:\n"
+            for index in range(len(missing_customers)):
+                name = missing_customers.loc[index,"Cliente"][0]
+                document = missing_customers.loc[index,"Documento"][0][0]
+                message = message + f"  {name}, documento: {document}\n"            
+            message = message + "El programa debe crearlos \n"
+        if missing_products.shape[0] > 0:
+            message = message + "\nError, siigo no posee los siguientes productos:\n"
+            for product in missing_products:
+                message = message + f"  {product}\n"                
+        print(message)
+
+        return missing_customers, missing_products
         
     @staticmethod
     def printProgressBar (iteration, total, prefix = '', suffix = "", decimals = 1, length = 40, fill = '█', printEnd = ""):
@@ -233,13 +270,35 @@ class utils():
             ("ú", "u"),
             ("ñ", "n"),
         )
+        s = s.lower()
         for a, b in replacements:
-            s = s.replace(a, b).replace(a.upper(), b.upper())
+            s = s.replace(a, b)
         return s   
     
     @staticmethod
+    def prepare_product_name(name:str)->str:
+        name = utils.normalize(name)
+        name = name.replace(" ","")        
+        return name
+    
+    @staticmethod
     def clean_document(documentoCliente:str)->int:
-                       
+        """
+        lee el documento del cliente y lo entrega en tipo entero. Se revisa que la info salga adecuadamente. 
+
+        Parameters
+        ----------
+        documentoCliente : str
+            identificacion del cliente en formato string
+             ex: 9 0 1 5 4 7 7 5 7 - 3
+
+        Returns
+        -------
+        int
+            entero del documento del cliente 
+            ex: 901547757.
+
+        """
         if type(documentoCliente)== float or type(documentoCliente)== int:
             if math.isnan(documentoCliente) == True: # ahora pirpos no pone documento de consumidor final
                 documentoCliente = 222222222222	
@@ -247,5 +306,6 @@ class utils():
         if type(documentoCliente) == str:
             documentoCliente = documentoCliente.replace(" ","")
             if "-" in documentoCliente:
-                documentoCliente = int(documentoCliente[:documentoCliente.find("-")])
-        return documentoCliente
+                documentoCliente = documentoCliente[:documentoCliente.find("-")]
+            
+        return int(documentoCliente)
