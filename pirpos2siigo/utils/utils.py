@@ -1,8 +1,6 @@
 import pandas as pd
-import re
 import math
-import numpy as np
-class utils():
+class Utils():
     
     @staticmethod
     def prepararArchivo(file:pd, tipoArchivo:int, modificarNumeracionFactura:bool=False, numeracionInicial:(int,int)=(0,0))->pd: 
@@ -37,7 +35,7 @@ class utils():
             file = file.reset_index(drop=True)
             file.columns = encabezados
             file = file.dropna(subset=['Código'],axis=0)
-            file["Nombre"] = file["Nombre"].apply(utils.prepare_product_name)
+            file["Nombre"] = file["Nombre"].apply(Utils.prepare_product_name)
             
         elif tipoArchivo == 1:#archivo de clientes PirPos
             encabezados = file.iloc[0,:]
@@ -54,10 +52,10 @@ class utils():
             file["Total"] = file["Total"].str.replace('.','',regex=True)
             file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
             file["Cantidad"] = pd.to_numeric(file["Cantidad"], downcast="float")
-            file["Producto"] = file["Producto"].apply(utils.prepare_product_name)
+            file["Producto"] = file["Producto"].apply(Utils.prepare_product_name)
             
             if modificarNumeracionFactura == True:
-                file = utils._cambiarNumeracion(file,numeracionInicial)
+                file = Utils._cambiarNumeracion(file,numeracionInicial)
             
         elif tipoArchivo == 3:#archivo ventas por cliente
             encabezados = file.iloc[1,:]
@@ -68,10 +66,10 @@ class utils():
             file["Total"] = file["Total"].str.replace(',','',regex=True)
             file["Total"] = file["Total"].str.replace('.','',regex=True)
             file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
-            file["Documento"] = file["Documento"].apply(utils.clean_document)
+            file["Documento"] = file["Documento"].apply(Utils.clean_document)
             
             if modificarNumeracionFactura == True:
-                file = utils._cambiarNumeracion(file,numeracionInicial)
+                file = Utils._cambiarNumeracion(file,numeracionInicial)
             
         else: #archivo clientes Siigo
             encabezados = file.iloc[5,:]
@@ -123,7 +121,7 @@ class utils():
         
         for fila in range(filas):
            facturai = file.loc[fila,nombreColumna]  
-           prefijo,numeroFactura = utils._revisarFactura(facturai,prefijosPOS)#obtiene tipo y numero de factura
+           prefijo,numeroFactura = Utils._revisarFactura(facturai,prefijosPOS)#obtiene tipo y numero de factura
            
            if prefijo == "LL":
                if numeroFactura != facturaAnteriorPos:
@@ -277,7 +275,7 @@ class utils():
     
     @staticmethod
     def prepare_product_name(name:str)->str:
-        name = utils.normalize(name)
+        name = Utils.normalize(name)
         name = name.replace(" ","")        
         return name
     

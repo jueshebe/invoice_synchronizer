@@ -5,9 +5,9 @@ import unidecode
 import math
 import time
 import re
-from utils.utils import utils
+from pirpos2siigo.utils.utils import Utils
 
-class Siigo():
+class Connector():
     def __init__(self,userName="industriagastronomicadm@gmail.com", access_key="ZDFkZGJkN2YtMWVjZS00MTI5LWI2NjUtMzlmNzk5ZDQyMDJjOiM5KTlfLGlyYlo="):
         
         #datos del API de siigo
@@ -20,19 +20,19 @@ class Siigo():
         modificarNumeroFactura = True
         numeracionInicial = (16259,0)
         #productos
-        self._productos = utils.prepararArchivo(pd.read_excel("./archivos/Listado de productos _ Servicios.xlsx"),0,modificarNumeroFactura,numeracionInicial)
+        self._productos = Utils.prepararArchivo(pd.read_excel("./archivos/Listado de productos _ Servicios.xlsx"),0,modificarNumeroFactura,numeracionInicial)
         
         #clientes Pirpos
-        self._clientesPirPos = utils.prepararArchivo(pd.read_html("./archivos/clientes.xls")[0],1,modificarNumeroFactura,numeracionInicial)
+        self._clientesPirPos = Utils.prepararArchivo(pd.read_html("./archivos/clientes.xls")[0],1,modificarNumeroFactura,numeracionInicial)
         
         #ventas por producto
-        self._ventasPProducto = utils.prepararArchivo(pd.read_html("./archivos/reporte-productos.xls")[0],2,modificarNumeroFactura,numeracionInicial)
+        self._ventasPProducto = Utils.prepararArchivo(pd.read_html("./archivos/reporte-productos.xls")[0],2,modificarNumeroFactura,numeracionInicial)
         
         #ventas por cliente
-        self._ventasPCliente = utils.prepararArchivo(pd.read_html("./archivos/reporte-facturas.xls")[0],3,modificarNumeroFactura,numeracionInicial)
+        self._ventasPCliente = Utils.prepararArchivo(pd.read_html("./archivos/reporte-facturas.xls")[0],3,modificarNumeroFactura,numeracionInicial)
         
         #ventas por cliente Siigo
-        self._clientesSiigo = utils.prepararArchivo(pd.read_excel("./archivos/Clientes.xlsx"),4,modificarNumeroFactura,numeracionInicial)
+        self._clientesSiigo = Utils.prepararArchivo(pd.read_excel("./archivos/Clientes.xlsx"),4,modificarNumeroFactura,numeracionInicial)
         
         #relacion PirPos Siigo
         #formas de pago
@@ -47,7 +47,7 @@ class Siigo():
         
         
         #revision de archivos para eliminar errores 
-        self.a,self.b=utils.revisarDocumentos(self._productos,self._clientesSiigo, self._ventasPProducto,self._ventasPCliente)
+        self.a,self.b=Utils.revisarDocumentos(self._productos,self._clientesSiigo, self._ventasPProducto,self._ventasPCliente)
         
         
     
@@ -122,12 +122,12 @@ class Siigo():
         #itera en todos los clientes de PirPos
         size = len(self._clientesPirPos)
         for idx in range(size):
-            utils.printProgressBar(idx,size-1)
+            Utils.printProgressBar(idx,size-1)
             identificacion = self._clientesPirPos.loc[idx,"Documento"]
             nombre = self._clientesPirPos.loc[idx,"Nombre"]
             
             try:       
-                identificacion =utils.clean_document(identificacion)
+                identificacion =Utils.clean_document(identificacion)
             except:
                 contador_errores+=1
                 erroresBackUp[contador_errores] = {"nombre_cliente":nombre, "identificacion":identificacion, "fila":  idx+2, "error":"falla al convertir a entero"}
@@ -172,7 +172,7 @@ class Siigo():
 
         """
         #revisar que el cliente tenga datos en la columna documento
-        nombre = utils.normalize(nombre)#elimina caracteres que no procesa siigo
+        nombre = Utils.normalize(nombre)#elimina caracteres que no procesa siigo
         largo = len(nombre)
         if largo >100:
             nombre = nombre[0:100]
@@ -365,7 +365,7 @@ class Siigo():
             mask = join2["No. Factura"] == facturai
             #revisa si es factura POS o Electronica
             tipoComprobante = None
-            prefijoIdentificado, numeroFactura = utils._revisarFactura(facturai,[".","LL"])# dejar estas variables globales en todo el programa ###########
+            prefijoIdentificado, numeroFactura = Utils._revisarFactura(facturai,[".","LL"])# dejar estas variables globales en todo el programa ###########
             tipoComprobante = "POS" if prefijoIdentificado=="LL" else "FE"
            
             
@@ -381,7 +381,7 @@ class Siigo():
             documentoCliente = datosFacturai.loc[0,"Documento"]
             # print(type(documentoCliente))
             try:
-                documentoCliente = utils.clean_document(documentoCliente)
+                documentoCliente = Utils.clean_document(documentoCliente)
                     
             except:
                 print("fila {0} factura {1} {2} genera problema por documento de cliente".format(fila, tipoComprobante,numeroFactura ))
@@ -462,50 +462,4 @@ class Siigo():
         print("\n###########################\nFin Envio Masivo de facturas\n###########################\n")
 
 
-
-if __name__ == "__main__":
-     
-    ##tareas
-    ## crear json de errores para crear facturas como se hizo para la creacion de clientes
-    #crear yml para cargar datos de configuracion como prefijos, token, usuario, numeraciones iniciales etc. 
-    #modificar fucnion de crear facturas para que pueda cargar el json de errores y volver a intentar a crear las facturas automaticamnete. 
-    #hacer que se imprima la barra de progreso apra la creacion de clientes 
-    
-    #create the connector
-    siigoConnector = Siigo()
-    
-    # siigoConnector.actualizarClientes()
-    
-    #agregar codigo para verificar si todos los productos existen antes de enviarlos 
-    #revisar que las uniones no dejen datos importantes en none 
-    #mejorar print de las facturas creadas 
-    #mejorar el reenvio de facturas con errores (posiblemente se debe cambiar como se imprima el error en el .txt)
-    # siigoConnector.enviarFacturas()
-    #809
-    # siigoConnector.enviarFacturas(0)
-    # siigoConnector.enviarFacturas(0,[3170,3425,3426,3427,3428,3731,3733])
-   
-    #700
-    
-    # inpt = input("Desea actualizar clientes? si/no: ")
-    
-    # # clients update  
-    # if inpt == "si":
-        # siigoConnector.actualizarClientes()
-    
-    # inpt = input("Desea actualizar facturas? si/no: ")
-    # if inpt == "si": 
-    #     inpt = input("Si conoce alguna posicion de inicio marquela, de lo contrario oprima enter: ")
-    #     inicio = 0
-    #     if inpt != "":
-    #         inicio = int(inpt)
-            
-    #     if siigoConnector.errores == True:
-    #         inpt = input("Hay errores actualizando clientes, desea continuar? si/no: ")
-    #         if inpt =="si":
-    #             #actualizacion de facturas 
-    #             siigoConnector.enviarFacturas(inicio)
-    #     else:
-    #         siigoConnector.enviarFacturas(inicio)
-    # print("Fin del programa")
 
