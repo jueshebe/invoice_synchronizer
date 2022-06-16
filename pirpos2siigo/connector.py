@@ -127,7 +127,7 @@ class Connector():
         with open("errores_clientes.json", "w") as json_file:
             json.dump(erroresBackUp, json_file, indent = 6)
         if self._errores == True:
-            raise Exception("No se ha crado algun cliente, revisar archivo errores_clientes.json")      
+            raise Exception("No se ha creado algun cliente, revisar archivo errores_clientes.json")      
         print("\n###########################\nFin Actualizacion de clientes\n###########################\n")
     
         

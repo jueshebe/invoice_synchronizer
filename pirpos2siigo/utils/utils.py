@@ -37,6 +37,7 @@ class Utils():
         # pd.read_excel(f"{documents}/productos-siigo/Listado de productos _ Servicios.xlsx")
 
 
+        time_column = ""
         if tipoArchivo == 0:#archivo de clientes PirPos
             def func(file_name):
                 file = pd.read_html(file_name)[0]
@@ -46,6 +47,7 @@ class Utils():
                 file = file.reset_index(drop=True)
                 return file
             extension = ".xls"
+            modificarNumeracionFactura=False
 
         elif tipoArchivo == 1:#archivo clientes Siigo
             def func(file_name):
@@ -58,6 +60,7 @@ class Utils():
                 file["Identificación"] = pd.to_numeric(file["Identificación"])
                 return file
             extension = ".xlsx"
+            modificarNumeracionFactura=False
 
         elif tipoArchivo == 2:#archivo de productos siigo
             def func(file_name):
@@ -70,6 +73,7 @@ class Utils():
                 file["Nombre"] = file["Nombre"].apply(Utils.prepare_product_name)
                 return file
             extension = ".xlsx"
+            modificarNumeracionFactura=False
             
         elif tipoArchivo == 3:#archivo ventas por producto pirpos
             def func(file_name):
@@ -83,11 +87,13 @@ class Utils():
                 file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
                 file["Cantidad"] = pd.to_numeric(file["Cantidad"], downcast="float")
                 file["Producto"] = file["Producto"].apply(Utils.prepare_product_name)
+                file["Fecha"] = file["Fecha"].str.replace('a. m.','AM')
+                file["Fecha"] = file["Fecha"].str.replace('p. m.','PM')
+                file["Fecha"] = pd.to_datetime(file["Fecha"], format='%Y-%m-%d %I:%M:%S %p')
             
-                if modificarNumeracionFactura == True:
-                    file = Utils._cambiarNumeracion(file,numeracionInicial)
                 return file
             extension = ".xls"
+            time_column = "Fecha"
 
         else: #archivo ventas por cliente pirpos
             def func(file_name):
@@ -101,16 +107,18 @@ class Utils():
                 file["Total"] = file["Total"].str.replace('.','',regex=True)
                 file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
                 file["Documento"] = file["Documento"].apply(Utils.clean_document)
-                
-                if modificarNumeracionFactura == True:
-                    file = Utils._cambiarNumeracion(file,numeracionInicial)
+                file["Fecha de creación"] = file["Fecha de creación"].str.replace('a. m.','AM')
+                file["Fecha de creación"] = file["Fecha de creación"].str.replace('p. m.','PM')
+                file["Fecha de creación"] = pd.to_datetime(file["Fecha de creación"], format='%d-%m-%Y %I:%M:%S %p')
+
                 return file
             extension = ".xls"
+            time_column = "Fecha de creación"
          
-        return  Utils._pd_from_directory(directory,extension,func) 
+        return  Utils._pd_from_directory(directory,extension,func,modificarNumeracionFactura, time_column,numeracionInicial) 
     
     @staticmethod
-    def _pd_from_directory(directory:str, file_extension:str, parse_instructions:Callable)-> pd:
+    def _pd_from_directory(directory:str, file_extension:str, parse_instructions:Callable,modificarNumeracionFactura=False, time_column="",numeracionInicial=(0,0))-> pd:
         """de los archivos encontrados en el directorio entrega un DatraFrame con la informacion
 
         Parameters
@@ -131,7 +139,15 @@ class Utils():
         files = [file_name for file_name in only_files if file_extension in file_name]
         if files:
             data_frames = [parse_instructions(file) for file in files]
-            return pd.concat(data_frames)
+            data_frame = pd.concat(data_frames)
+
+            if modificarNumeracionFactura == True:
+                data_frame.set_index(time_column, drop=False, append=False, inplace=True, verify_integrity=False)
+                data_frame = data_frame.sort_index()
+                data_frame = data_frame.reset_index(drop=True)
+                data_frame = Utils._cambiarNumeracion(data_frame,numeracionInicial)
+
+            return data_frame
         return None
 
     @staticmethod
