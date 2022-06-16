@@ -5,34 +5,33 @@ import unidecode
 import math
 import time
 import re
+from typing import Tuple
 from pirpos2siigo.utils.utils import Utils
 
 class Connector():
-    def __init__(self,userName="industriagastronomicadm@gmail.com", access_key="ZDFkZGJkN2YtMWVjZS00MTI5LWI2NjUtMzlmNzk5ZDQyMDJjOiM5KTlfLGlyYlo="):
+    def __init__(
+        self,
+        documents:str="./documents",
+        userName:str="industriagastronomicadm@gmail.com", 
+        access_key:str="ZDFkZGJkN2YtMWVjZS00MTI5LWI2NjUtMzlmNzk5ZDQyMDJjOiM5KTlfLGlyYlo=",
+        numeracionInicial:Tuple[int,int]=(0,0),
+        modificarNumeroFactura:bool = True
+        ):
         
         #datos del API de siigo
         self._userName = userName
         self._access_key = access_key
         self._access_token = None
-        # self._updateAccess_token()
-        
-        #datos
-        modificarNumeroFactura = True
-        numeracionInicial = (16259,0)
-        #productos
-        self._productos = Utils.prepararArchivo(pd.read_excel("./archivos/Listado de productos _ Servicios.xlsx"),0,modificarNumeroFactura,numeracionInicial)
+        self._updateAccess_token()
         
         #clientes Pirpos
-        self._clientesPirPos = Utils.prepararArchivo(pd.read_html("./archivos/clientes.xls")[0],1,modificarNumeroFactura,numeracionInicial)
         
-        #ventas por producto
-        self._ventasPProducto = Utils.prepararArchivo(pd.read_html("./archivos/reporte-productos.xls")[0],2,modificarNumeroFactura,numeracionInicial)
+        #self._clientesPirPos = Utils.prepararArchivo(f"{documents}/clientes-pirpos/",0,modificarNumeroFactura,numeracionInicial)
+        self._clientesSiigo = Utils.prepararArchivo(f"{documents}/clientes-siigo/",1,modificarNumeroFactura,numeracionInicial)
+        self._productos = Utils.prepararArchivo(f"{documents}/productos-siigo/",2,modificarNumeroFactura,numeracionInicial)
+        self._ventasPProducto = Utils.prepararArchivo(f"{documents}/ventas-por-productos/",3,modificarNumeroFactura,numeracionInicial)
+        self._ventasPCliente = Utils.prepararArchivo(f"{documents}/ventas-por-clientes/",4,modificarNumeroFactura,numeracionInicial)
         
-        #ventas por cliente
-        self._ventasPCliente = Utils.prepararArchivo(pd.read_html("./archivos/reporte-facturas.xls")[0],3,modificarNumeroFactura,numeracionInicial)
-        
-        #ventas por cliente Siigo
-        self._clientesSiigo = Utils.prepararArchivo(pd.read_excel("./archivos/Clientes.xlsx"),4,modificarNumeroFactura,numeracionInicial)
         
         #relacion PirPos Siigo
         #formas de pago
@@ -47,9 +46,11 @@ class Connector():
         
         
         #revision de archivos para eliminar errores 
-        self.a,self.b=Utils.revisarDocumentos(self._productos,self._clientesSiigo, self._ventasPProducto,self._ventasPCliente)
-        
-        
+        missing_customers, missing_products =Utils.revisarDocumentos(self._productos,self._clientesSiigo, self._ventasPProducto,self._ventasPCliente)
+        if len(missing_customers)>0:
+            self.actualizarClientes(missing_customers)
+        if len(missing_products)>0:
+            raise Exception("Error, se deben crear productos manualmente")
     
     #temporaly token
     @property    
@@ -93,59 +94,40 @@ class Connector():
     @property 
     def ventasPCliente(self):
         return self._ventasPCliente.copy()
-    #client id, client information
-    @property 
-    def clientesPirPos(self):
-        return self._clientesPirPos.copy()
     @property 
     def errores(self):
         return self._errores
     
     
     
-    def actualizarClientes(self):
+    def actualizarClientes(self,missing_customers):
         """
         Actualiza los clientes en siigo mostrando la barra de progeso 
         en el archivo ./errores/errores_clientes.json se guardan los errores
 
         """
-        
-        
+
         print("\n###########################\nActualizacion de clientes\n###########################\n")
         #errores Para imprimirlos en txt
         erroresBackUp = {}
         contador_errores = 0
         
-        #obtener clientes de siigo
-        clientesRegistradosSiigo = self._clientesSiigo
-        identificacionesSiigo = clientesRegistradosSiigo.iloc[:,0]
-        #itera en todos los clientes de PirPos
-        size = len(self._clientesPirPos)
+        size = len(missing_customers)
         for idx in range(size):
-            Utils.printProgressBar(idx,size-1)
-            identificacion = self._clientesPirPos.loc[idx,"Documento"]
-            nombre = self._clientesPirPos.loc[idx,"Nombre"]
-            
-            try:       
-                identificacion =Utils.clean_document(identificacion)
-            except:
+            Utils.printProgressBar(idx+1,size)
+            identificacion = int(missing_customers.loc[idx,"Documento"][0][0])
+            nombre = missing_customers.loc[idx,"Cliente"][0]
+            try:
+                result = self.crearCliente(identificacion,nombre)
+            except Exception as e:
                 contador_errores+=1
-                erroresBackUp[contador_errores] = {"nombre_cliente":nombre, "identificacion":identificacion, "fila":  idx+2, "error":"falla al convertir a entero"}
+                erroresBackUp[contador_errores] = {"nombre_cliente":nombre, "identificacion":identificacion, "error":str(e)}
                 self._errores = True
-                continue
-            
-            if (identificacion in identificacionesSiigo.values) == False:
-                #se crea cliente
-                try:
-                    result = self.crearCliente(identificacion,nombre)
-                except Exception as e:
-                    contador_errores+=1
-                    erroresBackUp[contador_errores] = {"nombre_cliente":nombre, "identificacion":identificacion, "fila":  idx+2, "error":str(e)}
-                    self._errores = True
                     
-        with open("./errores/errores_clientes.json", "w") as json_file:
+        with open("errores_clientes.json", "w") as json_file:
             json.dump(erroresBackUp, json_file, indent = 6)
-                
+        if self._errores == True:
+            raise Exception("No se ha crado algun cliente, revisar archivo errores_clientes.json")      
         print("\n###########################\nFin Actualizacion de clientes\n###########################\n")
     
         
@@ -378,21 +360,15 @@ class Connector():
             fecha = datosFacturai.loc[0,"Fecha"][0:10]
             
             #obtiene informacion del cliente
-            documentoCliente = datosFacturai.loc[0,"Documento"]
+            documentoCliente = int(datosFacturai.loc[0,"Documento"])
             # print(type(documentoCliente))
-            try:
-                documentoCliente = Utils.clean_document(documentoCliente)
-                    
-            except:
-                print("fila {0} factura {1} {2} genera problema por documento de cliente".format(fila, tipoComprobante,numeroFactura ))
-                erroresBackUp.append("\nfila {0} factura {1} {2} genera problema por documento de cliente\n".format(fila, tipoComprobante,numeroFactura ))
-                continue
+            
             #obtiene los items de la factura
             items=[]
             total_Productos = 0
             for i in range(len(datosFacturai)):
                 itemInfo ={}
-                itemInfo["code"]=datosFacturai.loc[i,"Id"]
+                itemInfo["code"]=datosFacturai.loc[i,"Código_y"]
                 itemInfo["description"]=unidecode.unidecode(datosFacturai.loc[i,"Producto"])
                 itemInfo["quantity"]=datosFacturai.loc[i,"Cantidad"]
                 

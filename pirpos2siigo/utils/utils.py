@@ -1,22 +1,27 @@
 import pandas as pd
 import math
+from os import listdir
+from os.path import isfile, join
+from typing import Callable, List, Tuple
+
 class Utils():
     
     @staticmethod
-    def prepararArchivo(file:pd, tipoArchivo:int, modificarNumeracionFactura:bool=False, numeracionInicial:(int,int)=(0,0))->pd: 
+    def prepararArchivo(directory:str, tipoArchivo:int, modificarNumeracionFactura:bool=False, numeracionInicial:Tuple[int,int]=(0,0))->pd: 
         """
         Prepara los archivos para que puedan leerse adecuadamente
 
         Parameters
         ----------
-        file : pd
-            archivo cargado con pandas.
+        directory : str
+            directorio donde se encuentran los archios
         tipoArchivo : int
             tipo de documento recibido 
-            1=archivo de productos (read_excel)
-            2=archivo de clientes (read_html)
-            3=archivo de ventas por producto (read_html)
-            4=archivo de ventas por cliente (read_html)
+            0=archivo de clientes Pirpos(read_html)
+            1=archivo de clientes Siigo (read_excel)
+            2=archivo de productos siigo (read_excel)
+            3=archivo de ventas por productos pirpos (read_html)
+            4=archivo de ventas por cliente pirpos (read_html)
         modificarNumeracionFactura: bool
             Modificar la numeracion de las facturas en orden creciente. 
         numeracionInicial: (int,int)
@@ -28,62 +33,109 @@ class Utils():
             retorna el archivo preparado para su lectura.
 
         """
-        
-        if tipoArchivo == 0:#archivo de productos siigo
-            encabezados = file.iloc[5,:]
-            file = file.drop(labels=[0,1,2,3,4,5,len(file)-1],axis=0)
-            file = file.reset_index(drop=True)
-            file.columns = encabezados
-            file = file.dropna(subset=['Código'],axis=0)
-            file["Nombre"] = file["Nombre"].apply(Utils.prepare_product_name)
+        # pd.read_html(f"{documents}/clientes-pirpos/clientes.xls")[0]
+        # pd.read_excel(f"{documents}/productos-siigo/Listado de productos _ Servicios.xlsx")
+
+
+        if tipoArchivo == 0:#archivo de clientes PirPos
+            def func(file_name):
+                file = pd.read_html(file_name)[0]
+                encabezados = file.iloc[0,:]
+                file = file.drop(labels=[0],axis=0)
+                file.columns = encabezados
+                file = file.reset_index(drop=True)
+                return file
+            extension = ".xls"
+
+        elif tipoArchivo == 1:#archivo clientes Siigo
+            def func(file_name):
+                file = pd.read_excel(file_name)
+                encabezados = file.iloc[5,:]
+                file = file.drop(labels=[0,1,2,3,4,5,len(file)-1],axis=0)
+                file = file.reset_index(drop=True)
+                file.columns = encabezados
+                file = file.dropna(subset=['Identificación'],axis=0)
+                file["Identificación"] = pd.to_numeric(file["Identificación"])
+                return file
+            extension = ".xlsx"
+
+        elif tipoArchivo == 2:#archivo de productos siigo
+            def func(file_name):
+                file = pd.read_excel(file_name)
+                encabezados = file.iloc[5,:]
+                file = file.drop(labels=[0,1,2,3,4,5,len(file)-1],axis=0)
+                file = file.reset_index(drop=True)
+                file.columns = encabezados
+                file = file.dropna(subset=['Código'],axis=0)
+                file["Nombre"] = file["Nombre"].apply(Utils.prepare_product_name)
+                return file
+            extension = ".xlsx"
             
-        elif tipoArchivo == 1:#archivo de clientes PirPos
-            encabezados = file.iloc[0,:]
-            file = file.drop(labels=[0],axis=0)
-            file.columns = encabezados
-            file = file.reset_index(drop=True)
+        elif tipoArchivo == 3:#archivo ventas por producto pirpos
+            def func(file_name):
+                file = pd.read_html(file_name)[0]
+                encabezados = file.iloc[1,:]
+                file = file.drop(labels=[0,1,len(file)-1],axis=0)
+                file.columns = encabezados
+                file = file.reset_index(drop=True)
+                file["Total"] = file["Total"].str.replace(',','',regex=True)
+                file["Total"] = file["Total"].str.replace('.','',regex=True)
+                file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
+                file["Cantidad"] = pd.to_numeric(file["Cantidad"], downcast="float")
+                file["Producto"] = file["Producto"].apply(Utils.prepare_product_name)
             
-        elif tipoArchivo == 2:#archivo ventas por producto
-            encabezados = file.iloc[1,:]
-            file = file.drop(labels=[0,1,len(file)-1],axis=0)
-            file.columns = encabezados
-            file = file.reset_index(drop=True)
-            file["Total"] = file["Total"].str.replace(',','',regex=True)
-            file["Total"] = file["Total"].str.replace('.','',regex=True)
-            file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
-            file["Cantidad"] = pd.to_numeric(file["Cantidad"], downcast="float")
-            file["Producto"] = file["Producto"].apply(Utils.prepare_product_name)
-            
-            if modificarNumeracionFactura == True:
-                file = Utils._cambiarNumeracion(file,numeracionInicial)
-            
-        elif tipoArchivo == 3:#archivo ventas por cliente
-            encabezados = file.iloc[1,:]
-            file = file.drop(labels=[0,1,len(file)-1],axis=0)
-            file.columns = encabezados
-            file = file.reset_index(drop=True)
-            # self._ventasPCliente = self._ventasPCliente.dropna(how="all")
-            file["Total"] = file["Total"].str.replace(',','',regex=True)
-            file["Total"] = file["Total"].str.replace('.','',regex=True)
-            file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
-            file["Documento"] = file["Documento"].apply(Utils.clean_document)
-            
-            if modificarNumeracionFactura == True:
-                file = Utils._cambiarNumeracion(file,numeracionInicial)
-            
-        else: #archivo clientes Siigo
-            encabezados = file.iloc[5,:]
-            file = file.drop(labels=[0,1,2,3,4,5,len(file)-1],axis=0)
-            file = file.reset_index(drop=True)
-            file.columns = encabezados
-            file = file.dropna(subset=['Identificación'],axis=0)
-            file["Identificación"] = pd.to_numeric(file["Identificación"])
-            
-        return file
-    
+                if modificarNumeracionFactura == True:
+                    file = Utils._cambiarNumeracion(file,numeracionInicial)
+                return file
+            extension = ".xls"
+
+        else: #archivo ventas por cliente pirpos
+            def func(file_name):
+                file = pd.read_html(file_name)[0]
+                encabezados = file.iloc[1,:]
+                file = file.drop(labels=[0,1,len(file)-1],axis=0)
+                file.columns = encabezados
+                file = file.reset_index(drop=True)
+                # self._ventasPCliente = self._ventasPCliente.dropna(how="all")
+                file["Total"] = file["Total"].str.replace(',','',regex=True)
+                file["Total"] = file["Total"].str.replace('.','',regex=True)
+                file["Total"] = pd.to_numeric(file["Total"], downcast="float")/100
+                file["Documento"] = file["Documento"].apply(Utils.clean_document)
+                
+                if modificarNumeracionFactura == True:
+                    file = Utils._cambiarNumeracion(file,numeracionInicial)
+                return file
+            extension = ".xls"
+         
+        return  Utils._pd_from_directory(directory,extension,func) 
     
     @staticmethod
-    def _cambiarNumeracion(file:pd, numeracionInicial:(int,int))->pd:
+    def _pd_from_directory(directory:str, file_extension:str, parse_instructions:Callable)-> pd:
+        """de los archivos encontrados en el directorio entrega un DatraFrame con la informacion
+
+        Parameters
+        ----------
+        directory : str
+            directorio que se debe revisar 
+        file_extension : str
+            extension de los archivos que se deben leer 
+        parse_instructions : Callable
+            funcion que lee los archivos y entrega pandas
+
+        Returns
+        -------
+        pd
+           objeto Dataframe
+        """
+        only_files = [join(directory, f) for f in listdir(directory) if isfile(join(directory, f))]
+        files = [file_name for file_name in only_files if file_extension in file_name]
+        if files:
+            data_frames = [parse_instructions(file) for file in files]
+            return pd.concat(data_frames)
+        return None
+
+    @staticmethod
+    def _cambiarNumeracion(file:pd, numeracionInicial:Tuple[int,int])->pd:
         """
         Verificar que las facturas tengan un valor correcto (orden creciente)
 
@@ -145,7 +197,7 @@ class Utils():
            
         return file #archio con la numeracion correcta 
            
-    def _revisarFactura(factura:str, prefijosPOS:[str,str])->(str,int):
+    def _revisarFactura(factura:str, prefijosPOS:Tuple[str,str])->Tuple[str,int]:
         """
         Obtiene la numeracion y tipo de factura
 
@@ -176,12 +228,16 @@ class Utils():
         
 
     @staticmethod
-    def revisarDocumentos(productos,clientesSiigo,ventasPProducto,ventasPCliente):
+    def revisarDocumentos(productos:pd,clientesSiigo:pd,ventasPProducto:pd,ventasPCliente:pd):
         """
         Revisa que los archvios tengan la informacion adecuada 
 
         Parameters
         ----------
+        productos:pd
+            productos en Siigo
+        clientesSiigo:pd
+            clientes en siigo
         ventasPCliente : pd
             Ventas por cliente.
         ventasPProducto : pd
@@ -192,7 +248,7 @@ class Utils():
         None.
 
         """
-        if ventasPCliente.sum()["Total"]!= ventasPProducto.sum()["Total"]:
+        if abs(ventasPCliente.sum()["Total"]- ventasPProducto.sum()["Total"])>=50:
             raise(Exception("Las ventas por productos no coinciden con las ventas por facturas."))
         
         
@@ -217,7 +273,8 @@ class Utils():
         if missing_products.shape[0] > 0:
             message = message + "\nError, siigo no posee los siguientes productos:\n"
             for product in missing_products:
-                message = message + f"  {product}\n"                
+                message = message + f"  {product}\n"              
+            message = message + "Se deben crear manualmente \n"           
         print(message)
 
         return missing_customers, missing_products

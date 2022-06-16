@@ -1,2 +1,3 @@
 __version__ = '0.1.0'
 from pirpos2siigo.connector import Connector
+from pirpos2siigo.utils.utils import Utils

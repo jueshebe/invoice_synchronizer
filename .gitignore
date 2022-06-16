@@ -1,4 +1,6 @@
-archivos/
-errores/
+documents/
+errors/
 utils/__pycache__
 prueba.py
+.DS_Store
+errores_clientes.json
