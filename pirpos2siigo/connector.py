@@ -1,3 +1,4 @@
+import datetime
 import requests
 import json
 import pandas as pd
@@ -261,7 +262,7 @@ class Connector():
         body={
               "document": { "id": self._tipoComprobante[tipoComprobante]},
               "number":invoiceNumber,
-              "date": fecha,
+              "date": fecha.strftime("%Y-%m-%d"),
               "customer": {"identification": str(identificacion),"branch_office": 0},
               "seller": 709,
               "observations": "Observaciones",
@@ -269,8 +270,8 @@ class Connector():
               "payments": [
                     {
                       "id": method,
-                      "value": pyment#,
-                      #"due_date": "2021-03-19"
+                      "value": pyment,
+                      "due_date": (fecha+datetime.timedelta(days=10)).strftime("%Y-%m-%d")# revisar para facturas normales 
                     }],
               "retentions":[{"id":18091}]
             }
@@ -357,7 +358,7 @@ class Connector():
             datosFacturai = datosFacturai.reset_index(drop=True)
             
             #fecha de la factura
-            fecha = datosFacturai.loc[0,"Fecha"][0:10]
+            fecha = datosFacturai.loc[0,"Fecha"]
             
             #obtiene informacion del cliente
             documentoCliente = int(datosFacturai.loc[0,"Documento"])
