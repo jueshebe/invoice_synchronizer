@@ -4,4 +4,4 @@ utils/__pycache__
 prueba.py
 .DS_Store
 errores_clientes.json
-errores facturas.txt
+errores_facturas.json

@@ -6,8 +6,8 @@ import unidecode
 import math
 import time
 import re
-from typing import Tuple
-from pirpos2siigo.utils.utils import Utils
+from typing import Optional, Tuple, List
+from . import Utils
 
 class Connector():
     def __init__(
@@ -36,7 +36,6 @@ class Connector():
         
         #relacion PirPos Siigo
         #formas de pago
-        #revisar domicilio, no esta creada
         self._formasPago = {'Efectivo':3025, 'Tarjeta débito':3027, 'Tarjeta crédito':3027,'Transferencia bancaria':7300, 'Domicilio':3025, 'Rappi':7325}
         #impuestos
         self._impuestos = {"I CONSUMO (8%)":{"valor":0.08,"id":7081}}
@@ -103,7 +102,7 @@ class Connector():
     
     def actualizarClientes(self,missing_customers):
         """
-        Actualiza los clientes en siigo mostrando la barra de progeso 
+        Actualiza los clientes en siigo mostrando la barra de progreso 
         en el archivo ./errores/errores_clientes.json se guardan los errores
 
         """
@@ -154,7 +153,6 @@ class Connector():
             estado de la operación. True= se creó cliente.
 
         """
-        #revisar que el cliente tenga datos en la columna documento
         nombre = Utils.normalize(nombre)#elimina caracteres que no procesa siigo
         largo = len(nombre)
         if largo >100:
@@ -226,7 +224,6 @@ class Connector():
         itemInfo["code"]="61d7d3349ab18205d7997fa0"
         itemInfo["description"]="Jugos Hit mango"
         itemInfo["quantity"]= 1
-        #se fija el impuesto del 8% porque siempre es comida 
         itemInfo["price"]=3000
         # total_Productos += math.ceil((math.ceil(itemInfo["price"]*itemInfo["quantity"]*100)/100+math.ceil(itemInfo["price"]*itemInfo["quantity"]*0.08*100)/100)*100)/100
         total_Productos = itemInfo["price"]*itemInfo["quantity"]+round(itemInfo["price"]*itemInfo["quantity"]*0.08,2)
@@ -297,7 +294,7 @@ class Connector():
                         continue
                     else:
                         print(response.text)
-                        info = "factura {0} {1} genera error: ".format(tipoComprobante,invoiceNumber ) + response.json()["Errors"][0]["Code"]
+                        info = str(response.json()["Errors"])
                         raise Exception(info)
                 elif response.json()["Errors"][0]["Code"] == "invalid_total_payments":
                     #el mensaje indica el valor que debe ser pagado
@@ -310,17 +307,22 @@ class Connector():
                     
                 else:
                     print(response.text)
-                    info = "factura {0} {1} genera error: ".format(tipoComprobante,invoiceNumber ) + response.json()["Errors"][0]["Code"]
+                    info = str(response.json()["Errors"][0]["Code"])
                     raise Exception(info)
             return True#se crea exitosamente
         
-    def enviarFacturas(self, posicionInicio=0, filasEscogidas=None):
-        # el nombre lo pueden cambiar en cualquier momento y no se relacionanran bien los id con los productos
-        #se plantea por ahora agregar el id al codigo del producto
-        #el signo - puede salir en documento, eliminarlo 
-        #cuando no se encuentre producto se podria crear y enviarlo 
-        #si el nombre tiene un espacio al inicio falla. es mejor poner solo codigos
-        #permitir que retome las facturas con error!!
+    def enviarFacturas(self, facturas_escogidas:Optional[List[str]] = None, start_at:Optional[str]=None):
+        """create readed invoices. You can use facturas_escogidas to send a group of invoices instead to send all them.\n
+           If you whan continue the creation from a specific invoice use start_at with the invoice number. 
+
+        Parameters
+        ----------
+        facturas_escogidas : Optional[List[str]] = None
+            list of invoice numbers that must be created. If None is passed so all readed invoiced will be created 
+        start_at : Optional[str] = None
+            reference invoice to start to create them. Useful if the process crashes and you don't want to begin the creation from the first invoice 
+        
+        """
         
         print("\n###########################\nEnvio Masivo de facturas\n###########################\n")
         #concat dataframes with left join 
@@ -330,25 +332,23 @@ class Connector():
         #numeros de facturas .
         
         facturas = join2["No. Factura"].unique()
-        if filasEscogidas != None:
-            facturasEscogidas = []
-            for i in filasEscogidas:
-                facturasEscogidas.append(facturas[i])
-            facturas = facturasEscogidas
+        if facturas_escogidas != None:
+            facturas = facturas_escogidas
+        if facturas_escogidas == None and start_at != None:
+            mask = join2["No. Factura"] == start_at
+            index = facturas.index[mask]
+            facturas = join2.iloc[index:,"No. Factura"]
         #revisa cada factura
         
-        erroresBackUp = ['errores enviando Facturas:']
+        erroresBackUp = {}
+        contador_errores = 0
         size = len(facturas)
-        for fila in range(posicionInicio,size):
+        for factura in facturas:
             
-            # self.printProgressBar(fila,size-1)
-            # time.sleep(0.5)
-            facturai = facturas[fila]
             #selecciona todos los datos asociados a esa factura 
-            mask = join2["No. Factura"] == facturai
+            mask = join2["No. Factura"] == factura
             #revisa si es factura POS o Electronica
-            tipoComprobante = None
-            prefijoIdentificado, numeroFactura = Utils._revisarFactura(facturai,[".","LL"])# dejar estas variables globales en todo el programa ###########
+            prefijoIdentificado, numeroFactura = Utils._revisarFactura(factura,[".","LL"])# dejar estas variables globales en todo el programa ###########
             tipoComprobante = "POS" if prefijoIdentificado=="LL" else "FE"
            
             
@@ -422,20 +422,22 @@ class Connector():
             try:
                 result = self.postInvoice(tipoComprobante,fecha,numeroFactura, documentoCliente, items, totalPagado, formaPago)
                 if result == True:
-                    print("fila {0} factura {1} {2} creada\n".format(fila,tipoComprobante,numeroFactura ))
+                    print("factura {0} {1} creada\n".format(tipoComprobante,numeroFactura ))
                 else:
-                    print("fila {0} factura {1} {2} ya existe\n".format(fila, tipoComprobante,numeroFactura))
+                    print("factura {0} {1} ya existe\n".format(tipoComprobante,numeroFactura))
                           
             except Exception as e:
-                print("\nError en fila {0}\n".format(fila))
+                print("\nError en factura {0} {1}\n".format(tipoComprobante, numeroFactura))
                 print(e)
                 print()
-                erroresBackUp.append("\nError en fila {0}\n".format(fila)+str(e))
-            # break   
-        with open("errores facturas.txt", "w") as txt_file:
-            for line in erroresBackUp:
-                txt_file.write(line + "\n") 
-        
+                contador_errores+=1
+                erroresBackUp[contador_errores] = {
+                    "numero factura":numeroFactura,
+                    "prefijo": prefijoIdentificado,
+                    "error":str(e)}
+                    
+        with open("errores_facturas.json", "w") as json_file:
+            json.dump(erroresBackUp, json_file, indent = 6)
         print("\n###########################\nFin Envio Masivo de facturas\n###########################\n")
 
 
