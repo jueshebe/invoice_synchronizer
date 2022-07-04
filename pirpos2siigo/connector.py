@@ -336,8 +336,8 @@ class Connector():
             facturas = facturas_escogidas
         if facturas_escogidas == None and start_at != None:
             mask = join2["No. Factura"] == start_at
-            index = facturas.index[mask]
-            facturas = join2.iloc[index:,"No. Factura"]
+            index = join2["No. Factura"].index[mask].tolist()
+            facturas = join2.loc[index[0]:,"No. Factura"].unique()
         #revisa cada factura
         
         erroresBackUp = {}
