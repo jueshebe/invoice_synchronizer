@@ -4,8 +4,10 @@ from pirpos2siigo import utils
 import numpy as np
 import pandas as pd
 #instanciar objeto 
-connector = Connector()
+connector = Connector(configuration_path="configuration.JSON")
 
+pirpos_clients = connector._Connector__load_pirpos_clients()  
+pass
 #connector.enviarFacturas()
 #connector.enviarFacturas(start_at="LL24746")
 #connector.enviarFacturas(
@@ -23,7 +25,7 @@ connector = Connector()
 #hacer que los archivos se descarguen automaticamente
 
 
-pivot = connector.ventasPProducto.groupby(["Vendedor","Producto"]).count()
-pivot = pd.pivot_table(connector.ventasPProducto,index='Producto',columns='Vendedor',values='Cantidad',aggfunc="sum")
-pivot = pivot.fillna(0)
-pivot.to_excel("pivoteo.xlsx")
+# pivot = connector.ventasPProducto.groupby(["Vendedor","Producto"]).count()
+# pivot = pd.pivot_table(connector.ventasPProducto,index='Producto',columns='Vendedor',values='Cantidad',aggfunc="sum")
+# pivot = pivot.fillna(0)
+# pivot.to_excel("pivoteo.xlsx")

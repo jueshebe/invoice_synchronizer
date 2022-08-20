@@ -6,28 +6,139 @@ import unidecode
 import math
 import time
 import re
-from typing import Optional, Tuple, List
-from . import Utils
-
+from typing import Optional, Tuple, List,Dict, Union
+from . import (
+    Utils,
+    ErrorSiigoToken,
+    ErrorPirposToken
+)
+import os 
 
 class Connector:
     def __init__(
         self,
-        documents: str = "./documents",
-        userName: str = "industriagastronomicadm@gmail.com",
-        access_key: str = "ZDFkZGJkN2YtMWVjZS00MTI5LWI2NjUtMzlmNzk5ZDQyMDJjOiM5KTlfLGlyYlo=",
-        numeracionInicial: Tuple[int, int] = (0, 0),
-        modificarNumeroFactura: bool = True,
+        siigo_userName: str = os.environ["SIIGO_USER_NAME"],
+        siigo_access_key: str = os.environ["SIIGO_ACCESS_KEY"],
+        pirpos_userName: str = os.environ["PIRPOS_USER_NAME"],
+        pirpos_password: str = os.environ["PIRPOS_PASSWORD"],
+        configuration_path: str = "configuration.JSON"
     ):
 
-        # datos del API de siigo
-        self._userName = userName
-        self._access_key = access_key
-        self._access_token = None
-        self._updateAccess_token()
+        # Siigo API info
+        self.__siigo_userName = siigo_userName
+        self.__siigo_access_key = siigo_access_key
+        self.__siigo_access_token = self.__get_siigo_access_token()
 
-        # clientes Pirpos
+        #Pirpos API info
+        self.__pirpos_userName = pirpos_userName
+        self.__pirpos_passwd = pirpos_password
+        self.__pirpos_access_token = self.__get_pirpos_access_token()
 
+        #Pirpos to Siigo mapings
+        self.__pay_method_map,self.__taxes_map,self.__invoice_type_map = self.__load_pirpos2siigo_config(configuration_path)
+
+    
+
+    def __get_siigo_access_token(self)->str:
+        """
+        Obtiene el token de acceso para usar la API de SIIGO
+
+        Raises
+        ------
+        ErrorSiigoToken
+            Error solicitando token, datos incorrectos.
+
+        Returns
+        -------
+        str
+            access_token
+
+        """
+        url = "https://api.siigo.com/auth"
+        values = {
+            "username": self.__siigo_userName, 
+            "access_key": self.__siigo_access_key
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, data=json.dumps(values), headers=headers)
+
+        if response.ok == False:
+            raise ErrorSiigoToken("Error solicitando token, revisar userName y access_key")
+        access_token = response.json()["access_token"]
+        return access_token
+
+    def __get_pirpos_access_token(self)->str:
+        """
+        Obtiene el token de acceso para usar la API de PIRPOS
+
+        Raises
+        ------
+        ErrorPirposToken
+            Error solicitando token, datos incorrectos.
+
+        Returns
+        -------
+        str
+            access_token
+
+        """
+        url = "https://api.pirpos.com/login"
+        values = {
+            "name":"",
+            "email": self.__pirpos_userName, 
+            "password": self.__pirpos_passwd
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, data=json.dumps(values), headers=headers)
+
+        if response.ok == False:
+            raise ErrorPirposToken("Error getting Pirpos token, check email and password")
+        access_token = response.json()["tokenCurrent"]
+        return access_token
+
+    def __load_pirpos2siigo_config(self,file_path:str)-> Tuple[Dict[str,int],Dict[str,Dict["str",int]],Dict[str,int]]:
+        """read JSON configuration file. 
+        It contains information of how map Pirpos to Siigo 
+
+        Parameters
+        ----------
+        file_path : str
+            file direction
+        
+        Returns
+        -------
+        Tuple[Dict[str,int],Dict[str,Dict["str",int]],Dict[str,int]]
+            returns a tuple with info to map data from Pirpos to Siigo
+            (pay_method_maping,taxes_maping, invout_tipe_maping)
+
+        """
+        with open(file_path) as file:
+            data = json.load(file)
+
+        return data["pay_method_pirpos2siigo"], data["taxes_pirpos2siigo"], data["invoice_type_pirpos2siigo"]
+
+    def __load_pirpos_clients(self,batch_clients:int = 100)->List[Dict[str,Union[str,int]]]:
+        
+        page = 0
+        clients = []
+        while True:
+            url = f"https://api.pirpos.com/clients?pagination=true&limit={batch_clients}&page={page}&clientData=&"
+
+            headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.__pirpos_access_token}'
+            }
+
+            data = requests.request("GET", url, headers=headers).json()["data"]
+            if len(data)==0:
+                break
+            clients.extend(data)
+            page+=1
+        return clients
+           
+    def load_info(self):
+        numeracionInicial: Tuple[int, int] = (0, 0),
+        modificarNumeroFactura: bool = True,
         # self._clientesPirPos = Utils.prepararArchivo(f"{documents}/clientes-pirpos/",0,modificarNumeroFactura,numeracionInicial)
         self._clientesSiigo = Utils.prepararArchivo(
             f"{documents}/clientes-siigo/", 1, modificarNumeroFactura, numeracionInicial
@@ -51,24 +162,6 @@ class Connector:
             numeracionInicial,
         )
 
-        # relacion PirPos Siigo
-        # formas de pago
-        self._formasPago = {
-            "Efectivo": 3025,
-            "Tarjeta débito": 3027,
-            "Tarjeta crédito": 3027,
-            "Transferencia bancaria": 7300,
-            "Domicilio": 3025,
-            "Rappi": 7325,
-        }
-        # impuestos
-        self._impuestos = {"I CONSUMO (8%)": {"valor": 0.08, "id": 7081}}
-        # tipo Comprobante
-        self._tipoComprobante = {"POS": 13136, "FE": 27233}
-        # errores
-        self._errores = False
-
-        # revision de archivos para eliminar errores
         missing_customers, missing_products = Utils.revisarDocumentos(
             self._productos,
             self._clientesSiigo,
@@ -79,56 +172,7 @@ class Connector:
             self.actualizarClientes(missing_customers)
         if len(missing_products) > 0:
             raise Exception("Error, se deben crear productos manualmente")
-
-    # temporaly token
-    @property
-    def access_token(self):
-        return self._access_token
-
-    def _updateAccess_token(self):
-        """
-        Obtiene el token de acceso para usar la API
-
-        Raises
-        ------
-        Exception
-            Error solicitando token, datos incorrectos.
-
-        Returns
-        -------
-        None.
-
-        """
-        url = "https://api.siigo.com/auth"
-        values = {"username": self._userName, "access_key": self._access_key}
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, data=json.dumps(values), headers=headers)
-
-        if response.ok == False:
-            raise Exception("Error solicitando token, revisar userName y access_key")
-        access_token = response.json()["access_token"]
-        self._access_token = access_token
-
-    # Getters
-    # id and product name
-    @property
-    def productos(self):
-        return self._productos.copy()
-
-    # invoice id, product name, ammount and taxes
-    @property
-    def ventasPProducto(self):
-        return self._ventasPProducto.copy()
-
-    # invoice id, client identification, payment method, ammount
-    @property
-    def ventasPCliente(self):
-        return self._ventasPCliente.copy()
-
-    @property
-    def errores(self):
-        return self._errores
-
+   
     def actualizarClientes(self, missing_customers):
         """
         Actualiza los clientes en siigo mostrando la barra de progreso 
