@@ -7,19 +7,25 @@ import pandas as pd
 # instanciar objeto
 connector = Connector(configuration_path="configuration.JSON")
 
-#pirpos_clients = connector._load_pirpos_clients()
-
-#pirpos_products = connector._load_pirpos_products()
+# pirpos_clients = connector._load_pirpos_clients()
+# pirpos_clients = connector._load_siigo_clients()
+# pirpos_products = connector._load_pirpos_products()
 # siigo_products = connector._Connector__load_siigo_products()
 
 # pirpos_invoices_per_product = connector._Connector__load_pirpos_invoices_per_product("2022-07-01","2022-07-31",31)
-# pirpos_invoices_per_client = connector._load_pirpos_invoices_per_client(
+# successful,pirpos_invoices_per_client = connector._load_pirpos_invoices_per_client(
+#     "2022-07-1", "2022-07-01"
+# )
+successful,siigo_invoices_per_client = connector._load_siigo_invoices(
+    "2022-07-1", "2022-07-02"
+)
 #     "2022-07-01", "2022-07-02"
 # )
-connector.actualizarClientes()
-connector.actualizarProductos()
+# connector.actualizarClientes()
+# connector.updateProducts()
 pass
-# connector.enviarFacturas()
+
+
 # connector.enviarFacturas(start_at="LL24746")
 # connector.enviarFacturas(
 #    facturas_escogidas=[
@@ -40,7 +46,6 @@ pass
 # pivot = pd.pivot_table(connector.ventasPProducto,index='Producto',columns='Vendedor',values='Cantidad',aggfunc="sum")
 # pivot = pivot.fillna(0)
 # pivot.to_excel("pivoteo.xlsx")
-
 
 
 ##tareas los terceros no son clientes. para siigo no se descarga actualmente todos los clientes y la comparacion no queda bien para missin clients

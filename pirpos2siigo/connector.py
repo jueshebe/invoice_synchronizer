@@ -17,8 +17,9 @@ from . import (
     ErrorLoadingPirposProducts,
     ErrorLoadingSiigoProducts,
     ErrorLoadingPirposInvoices,
+    ErrorLoadingSiigoInvoices,
     ErrorCreatingCustomer,
-    constants
+    constants,
 )
 
 import os
@@ -131,10 +132,9 @@ class Connector:
         with open(file_path) as file:
             data = json.load(file)
 
-       
-        constants.PAYMETHOD_PIRPOS2SIIGO = data["pay_method_pirpos2siigo"],
-        constants.TAXES_PIRPOS2SIIGO = data["taxes_pirpos2siigo"],
-        constants.INVOICE_TYPE_PIRPOS2SIIGO = data["invoice_type_pirpos2siigo"],
+        constants.PAYMETHOD_PIRPOS2SIIGO = (data["pay_method_pirpos2siigo"],)
+        constants.TAXES_PIRPOS2SIIGO = (data["taxes_pirpos2siigo"],)
+        constants.INVOICE_TYPE_PIRPOS2SIIGO = (data["invoice_type_pirpos2siigo"],)
         constants.DEFAULT_CLIENT = data["default_client"]
 
     # cargar clientes
@@ -170,13 +170,15 @@ class Connector:
             clients.extend(data)
             page += 1
         clients = pd.json_normalize(clients)
+        default_client = {
+            "name": constants.DEFAULT_CLIENT["name"],
+            "document": constants.DEFAULT_CLIENT["document"],
+        }
+        clients.loc[len(clients.index)] = default_client
         clients = clients.fillna("")
         clients = clients.astype(str)
         clients["document"] = clients["document"].apply(utils.clean_document)
-        #clients.loc[:, "document"] = pd.to_numeric(
-        #    clients.loc[:, "document"], errors="coerce"
-        #)
-        clients = clients.append({"name":constants.DEFAULT_CLIENT["name"],"document":constants.DEFAULT_CLIENT["document"]}, ignore_index = True)
+
         return clients
 
     def _load_siigo_clients(self, batch_clients: int = 200) -> pd.DataFrame:
@@ -200,38 +202,41 @@ class Connector:
             "content-type": "application/json",
         }
 
-        page = 0
         clients = []
-        while True:
-            payload = json.dumps(
-                {
-                    "Id": 5461,
-                    "Skip": batch_clients * page,
-                    "Take": batch_clients,
-                    "Sort": " ",
-                    "FilterCriterias": '[{"Field":"var_State","FilterType":7,"OperatorType":0,"Value":["1"],"ValueUI":"Activo","Source":"FixedAssetStateEnum"},{"Field":"var_Type","FilterType":7,"OperatorType":0,"Value":["2"],"ValueUI":"Clientes","Source":"LightAccountTypeEnum"}]',
-                    "Params": '{"TabID":"1511","pTabID":"1511"}',
-                    "GetTotalCount": True,
-                    "GridOrderCriteria": None,
-                }
-            )
-            response = requests.request("POST", url, headers=headers, data=payload)
-            if response.ok == False:
-                raise ErrorLoadingSiigoClients(
-                    f"Can't download Siigo clients\n {response.text}"
+        for type_client in ["Clientes", "Proveedores"]:
+            page = 0
+            while True:
+                payload = json.dumps(
+                    {
+                        "Id": 5461,
+                        "Skip": batch_clients * page,
+                        "Take": batch_clients,
+                        "Sort": " ",
+                        "FilterCriterias": '[{"Field":"var_State","FilterType":7,"OperatorType":0,"Value":["1"],"ValueUI":"Activo","Source":"FixedAssetStateEnum"},{"Field":"var_Type","FilterType":7,"OperatorType":0,"Value":["2"],"ValueUI":"'
+                        + type_client
+                        + '","Source":"LightAccountTypeEnum"}]',
+                        "Params": '{"TabID":"1511","pTabID":"1511"}',
+                        "GetTotalCount": True,
+                        "GridOrderCriteria": None,
+                    }
                 )
-            data = response.json()["data"]["Value"]["Table"]
-            if len(data) == 0:
-                break
-            clients.extend(data)
-            page += 1
+                response = requests.request("POST", url, headers=headers, data=payload)
+                if response.ok == False:
+                    raise ErrorLoadingSiigoClients(
+                        f"Can't download Siigo clients\n {response.text}"
+                    )
+                data = response.json()["data"]["Value"]["Table"]
+                if len(data) == 0:
+                    break
+                clients.extend(data)
+                page += 1
         clients = pd.json_normalize(clients)
         clients = clients.fillna("")
         clients = clients.astype(str)
         clients["Identification"] = clients["Identification"].apply(
             utils.clean_document
         )
-                                 
+
         return clients
 
     # cargar productos
@@ -271,6 +276,9 @@ class Connector:
             page += 1
 
         products = pd.json_normalize(products)
+        products = products.fillna("")
+        products = products.astype(str)
+        products["name"] = products["name"].apply(Utils.normalize)
         return products
 
     def _load_siigo_products(self, batch_products: int = 200) -> pd.DataFrame:
@@ -438,7 +446,7 @@ class Connector:
                     "Can't download invoices per client from pirpos"
                 )
             data: List[Dict] = response.json()
-            
+
             for invoice_info in data:
                 invoices_per_client.extend(
                     [utils.read_invoice_per_client(invoice_info)]
@@ -447,9 +455,165 @@ class Connector:
                 break
 
         invoices_per_client = pd.json_normalize(invoices_per_client)
+        invoices_per_client = invoices_per_client.fillna("")
+        invoices_per_client = invoices_per_client.astype(str)
+        invoices_per_client["client_document"] = invoices_per_client[
+            "client_document"
+        ].apply(utils.clean_document)
         return invoices_per_client
 
-   
+    def _load_siigo_invoices(
+        self, init_day: str, end_day: str, step_days: int = 10, batch_invoices=200
+    ) -> Tuple[bool, pd.DataFrame]:
+        """get invoices per client on pirpos
+
+        Parameters
+        ----------
+        init_day : str
+            initial time to download invoices. year-month-day
+        end_day : str
+            end time to download invoices year-month-day
+        batch_invoices : int, optional
+            days used to download invoices in steps, by default 10
+
+        Returns
+        -------
+        pd.DataFrame
+            Pirpos invoices per client in a range of time
+        """
+
+        init_day = datetime.datetime.strptime(init_day, "%Y-%m-%d")
+        end_day = datetime.datetime.strptime(end_day, "%Y-%m-%d") + datetime.timedelta(
+            days=1
+        )
+        if init_day > end_day:
+            raise ErrorLoadingPirposInvoices("end_day must be greater than init_day")
+
+        days = 0
+        invoices_per_client = []
+        url = f"https://services.siigo.com/ACReportApi/api/v1/Report/post"
+        headers = {
+            "authority": "services.siigo.com",
+            "accept": "application/json, text/plain, */*",
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+        }
+        
+        while True:
+            time1 = init_day + datetime.timedelta(days=days)
+            time2 = (
+                init_day + datetime.timedelta(days=days + step_days)
+                if init_day + datetime.timedelta(days=days + step_days) <= end_day
+                else end_day
+            )
+            days += step_days
+            date1_str = datetime.datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
+            date2_str = datetime.datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
+            payload = {
+                "Id":5349,
+                "Skip":0,
+                "Take":2000,#cuidado esto puede danarse cuando las ventas aumenten mucho 
+                "Sort":" ",
+                "FilterCriterias":"[{\"Field\":\"AccountID\",\"FilterType\":68,\"OperatorType\":0,\"Value\":[],\"ValueUI\":\"\",\"Source\":\"Account\"},{\"Field\":\"DocDate\",\"FilterType\":76,\"OperatorType\":9,\"Value\":[\""+init_day.strftime("%Y%m%d")+"\",\""+end_day.strftime("%Y%m%d")+"\"]},{\"Field\":\"_var_DocClass\",\"FilterType\":7,\"OperatorType\":0,\"Value\":[\"1\"],\"ValueUI\":\"Factura de venta\",\"Source\":\"SalesTransactionEnum\"},{\"Field\":\"_var_CreatedByUser\",\"FilterType\":6,\"OperatorType\":0,\"Value\":[],\"ValueUI\":\"\",\"Source\":\"12\"}]",
+                "GetTotalCount":True,
+                "GridOrderCriteria":None
+            }
+            
+            response = requests.request("POST", url, headers=headers, json=payload)
+            if response.ok == False:
+                raise ErrorLoadingSiigoInvoices(
+                    "Can't download invoices from Siigo"
+                )
+            data: List[Dict] = response.json()["data"]["Value"]["Table"]
+
+            for invoice_info in data:
+                invoices_per_client.extend(
+                    [utils.read_invoice_per_client_siigo(invoice_info)]
+                )
+            if time2 >= end_day:
+                break
+        
+        if len(invoices_per_client) > 0:
+            invoices_per_client = pd.json_normalize(invoices_per_client)
+            invoices_per_client = invoices_per_client.fillna("")
+            return True, invoices_per_client
+        else:
+            return False, None
+            
+
+    def _load_pirpos_invoices_per_client(
+        self, init_day: str, end_day: str, step_days: int = 10
+    ) -> Tuple[bool, pd.DataFrame]:
+        """get invoices per client on pirpos
+
+        Parameters
+        ----------
+        init_day : str
+            initial time to download invoices. year-month-day
+        end_day : str
+            end time to download invoices year-month-day
+        batch_invoices : int, optional
+            days used to download invoices in steps, by default 10
+
+        Returns
+        -------
+        pd.DataFrame
+            Pirpos invoices per client in a range of time
+        """
+
+        init_day = datetime.datetime.strptime(init_day, "%Y-%m-%d")
+        end_day = datetime.datetime.strptime(end_day, "%Y-%m-%d") + datetime.timedelta(
+            days=1
+        )
+        if init_day > end_day:
+            raise ErrorLoadingPirposInvoices("end_day must be greater than init_day")
+
+        days = 0
+        invoices_per_client = []
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://app.pirpos.com/",
+            "Authorization": f"Bearer {self.__pirpos_access_token}",
+        }
+        payload = {}
+
+        while True:
+            time1 = init_day + datetime.timedelta(days=days)
+            time2 = (
+                init_day + datetime.timedelta(days=days + step_days)
+                if init_day + datetime.timedelta(days=days + step_days) <= end_day
+                else end_day
+            )
+            days += step_days
+            date1_str = datetime.datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
+            date2_str = datetime.datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
+            url = f"https://api.pirpos.com/reports/reportSalesInvoices?status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
+            response = requests.request("GET", url, headers=headers, data=payload)
+            if response.ok == False:
+                raise ErrorLoadingPirposInvoices(
+                    "Can't download invoices per client from pirpos"
+                )
+            data: List[Dict] = response.json()
+
+            for invoice_info in data:
+                invoices_per_client.extend(
+                    [utils.read_invoice_per_client_pirpos(invoice_info)]
+                )
+
+            if time2 >= end_day:
+                break
+
+        if len(invoices_per_client)>0:
+            invoices_per_client = pd.json_normalize(invoices_per_client)
+            invoices_per_client = invoices_per_client.fillna("")
+            invoices_per_client = invoices_per_client.astype(str)
+            invoices_per_client["client_document"] = invoices_per_client[
+                "client_document"
+            ].apply(utils.clean_document)
+            return True, invoices_per_client
+        else:
+            return False, None
+
     def actualizarClientes(self):
         """
         Actualiza los clientes en siigo mostrando la barra de progreso
@@ -465,14 +629,14 @@ class Connector:
         errors = False
         contador_errores = 0
 
-        #get missing clients
+        # get missing clients
         pirpos_clients = self._load_pirpos_clients()
         siigo_clients = self._load_siigo_clients()
-        missing_customers = utils.get_missing_clients(pirpos_clients,siigo_clients)
+        missing_customers = utils.get_missing_clients(pirpos_clients, siigo_clients)
         size = len(missing_customers)
         for idx in range(size):
             Utils.printProgressBar(idx + 1, size)
-            client_info = missing_customers.iloc[idx,:]
+            client_info = missing_customers.iloc[idx, :]
             try:
                 self.crearCliente(client_info)
             except Exception as e:
@@ -491,10 +655,10 @@ class Connector:
                 "Error creating clients, check clients_errors.json file"
             )
         print(
-            "\n###########################\Clients created\n###########################\n"
+            "\n###########################\nClients created\n###########################\n"
         )
 
-    def crearCliente(self, client_info:pd.Series):
+    def crearCliente(self, client_info: pd.Series):
         """
         Crea la solicitud para hacer un cliente en Siigo
 
@@ -514,28 +678,68 @@ class Connector:
             estado de la operación. True= se creó cliente.
 
         """
-        id_type= int(client_info["idDocumentType"]) if client_info["idDocumentType"].isnumeric() else "13"
-        checkDigit= int(client_info["checkDigit"]) if client_info["checkDigit"].isnumeric() else "9"
-        name = Utils.normalize(client_info["name"])  # elimina caracteres que no procesa siigo
-        name = name if len(name) <100 else name[0:100]
-        name = name if len(name)>0 else "."
-        last_name = Utils.normalize(client_info["lastName"])  # elimina caracteres que no procesa siigo
-        last_name = last_name if len(last_name) <100 else last_name[0:100]
-        last_name = last_name if len(last_name)>0 else "."
-        fiscal_resp = client_info["responsibilities"] if client_info["responsibilities"] != "" else "R-99-PN"
-        address = client_info["address"] if client_info["address"]!="" else "Cra. 18 #79A - 42"
-        country_code= client_info["cityDetail.countryCode"] if client_info["cityDetail.countryCode"]!="" else "CO"
-        state_code = client_info["cityDetail.stateCode"] if client_info["cityDetail.stateCode"]!="" else "11"
-        city_code = client_info["cityDetail.cityCode"] if client_info["cityDetail.cityCode"]!="" else "11001"
-        number = client_info["phone"] if client_info["phone"]!="" else "3006003345"
-        email = client_info["email"] if client_info["email"]!="" else "default@default.com"
+        id_type = (
+            int(client_info["idDocumentType"])
+            if client_info["idDocumentType"].isnumeric()
+            else "13"
+        )
+        checkDigit = (
+            int(client_info["checkDigit"])
+            if client_info["checkDigit"].isnumeric()
+            else "9"
+        )
+        name = Utils.normalize(
+            client_info["name"]
+        )  # elimina caracteres que no procesa siigo
+        name = name if len(name) < 100 else name[0:100]
+        name = name if len(name) > 0 else "."
+        last_name = Utils.normalize(
+            client_info["lastName"]
+        )  # elimina caracteres que no procesa siigo
+        last_name = last_name if len(last_name) < 100 else last_name[0:100]
+        last_name = last_name if len(last_name) > 0 else "."
+        fiscal_resp = (
+            client_info["responsibilities"]
+            if client_info["responsibilities"] != ""
+            else "R-99-PN"
+        )
+        address = (
+            client_info["address"]
+            if client_info["address"] != ""
+            else "Cra. 18 #79A - 42"
+        )
+        country_code = (
+            client_info["cityDetail.countryCode"]
+            if client_info["cityDetail.countryCode"] != ""
+            else "CO"
+        )
+        state_code = (
+            client_info["cityDetail.stateCode"]
+            if client_info["cityDetail.stateCode"] != ""
+            else "11"
+        )
+        city_code = (
+            client_info["cityDetail.cityCode"]
+            if client_info["cityDetail.cityCode"] != ""
+            else "11001"
+        )
+        number = client_info["phone"] if client_info["phone"] != "" else "3006003345"
+        email = (
+            client_info["email"]
+            if client_info["email"] != ""
+            else "default@default.com"
+        )
         body = {
             "type": "Customer",
-            "person_type": "Company" if client_info["idDocumentType"] == 31 else "Person",
+            "person_type": "Company"
+            if client_info["idDocumentType"] == 31
+            else "Person",
             "id_type": id_type,
             "identification": str(client_info["document"]),
             "check_digit": checkDigit,
-            "name": [name] if client_info["idDocumentType"] == 31 else [name, last_name],
+            "name": [name]
+            if client_info["idDocumentType"] == 31
+            else [name, last_name],
             "commercial_name": "",
             "branch_office": 0,
             # "active": "true",
@@ -550,9 +754,7 @@ class Connector:
                 },
                 "postal_code": "",
             },
-            "phones": [
-                {"indicative": "", "number": number, "extension": ""}
-            ],
+            "phones": [{"indicative": "", "number": number, "extension": ""}],
             "contacts": [
                 {
                     "first_name": "null",
@@ -581,42 +783,120 @@ class Connector:
                 raise Exception(str(response.json()["Errors"][0]))
         return True
 
-    def load_info(self):
-        numeracionInicial: Tuple[int, int] = ((0, 0),)
-        modificarNumeroFactura: bool = (True,)
-        # self._clientesPirPos = Utils.prepararArchivo(f"{documents}/clientes-pirpos/",0,modificarNumeroFactura,numeracionInicial)
-        self._clientesSiigo = Utils.prepararArchivo(
-            f"{documents}/clientes-siigo/", 1, modificarNumeroFactura, numeracionInicial
+    def updateProducts(self):
+        """
+        Update products
+        ./errores/errores_clientes.json file save errors
+
+        """
+
+        print(
+            "\n###########################\nCreating missing Products\n###########################\n"
         )
-        self._productos = Utils.prepararArchivo(
-            f"{documents}/productos-siigo/",
-            2,
-            modificarNumeroFactura,
-            numeracionInicial,
-        )
-        self._ventasPProducto = Utils.prepararArchivo(
-            f"{documents}/ventas-por-productos/",
-            3,
-            modificarNumeroFactura,
-            numeracionInicial,
-        )
-        self._ventasPCliente = Utils.prepararArchivo(
-            f"{documents}/ventas-por-clientes/",
-            4,
-            modificarNumeroFactura,
-            numeracionInicial,
+        # errores Para imprimirlos en txt
+        erroresBackUp = {}
+        errors = False
+        contador_errores = 0
+
+        # get missing products
+        pirpos_products = self._load_pirpos_products()
+        siigo_products = self._load_siigo_products()
+        missing_products = utils.get_missing_products(pirpos_products, siigo_products)
+        size = len(missing_products)
+        for idx in range(size):
+            Utils.printProgressBar(idx + 1, size)
+            product_info = missing_products.iloc[idx, :]
+            try:
+                self.create_product(product_info)
+            except Exception as e:
+                contador_errores += 1
+                erroresBackUp[contador_errores] = {
+                    "code": product_info["pirpos_id"],
+                    "name": product_info["name"],
+                    "error": str(e),
+                }
+                errors = True
+
+        with open("products_errors.json", "w") as json_file:
+            json.dump(erroresBackUp, json_file, indent=6)
+        if errors == True:
+            raise ErrorCreatingCustomer(
+                "Error creating products, check clients_errors.json file"
+            )
+        print(
+            "\n###########################\nProducts created\n###########################\n"
         )
 
-        missing_customers, missing_products = Utils.revisarDocumentos(
-            self._productos,
-            self._clientesSiigo,
-            self._ventasPProducto,
-            self._ventasPCliente,
-        )
-        if len(missing_customers) > 0:
-            self.actualizarClientes(missing_customers)
-        if len(missing_products) > 0:
-            raise Exception("Error, se deben crear productos manualmente")
+    def create_product(self, product_info: pd.Series):
+        """
+        request the product creation
+
+        Parameters
+        ----------
+        product_info:pd.Series
+            product info
+
+        Raises
+        ------
+        Exception
+            can't create product
+
+        Returns
+        -------
+        bool
+            response of operation. True= product created.
+
+        """
+
+        body = {
+            "code": product_info["pirpos_id"],
+            "name": product_info["name"],
+            "account_group": 673,
+            "type": "Product",
+            "stock_control": "false",
+            "active": "true",
+            "tax_classification": "Taxed",
+            "tax_included": "true",
+            "tax_consumption_value": 8,
+            "taxes": [{"id": 7081}],
+            "prices": [
+                {
+                    "currency_code": "COP",
+                    "price_list": [
+                        {
+                            "position": 1,
+                            "value": product_info["price"]
+                            if int(product_info["price"]) > 0
+                            else 1,
+                        }
+                    ],
+                }
+            ],
+            "unit": "94",
+            "unit_label": "unidad",
+            "reference": "REF1",
+            "description": ".",
+            # "additional_fields": {
+            #     "barcode": "B0123",
+            #     "brand": "Gef",
+            #     "tariff": "151612",
+            #     "model": "Loiry"
+            # }
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.__siigo_access_token,
+        }
+        url = "https://api.siigo.com/v1/products"
+        response = requests.post(url, data=str(body), headers=headers)
+
+        if response.ok == False:
+            if response.json()["Errors"][0]["Code"] == "already_exists":
+                return False
+            else:
+                raise Exception(str(response.json()["Errors"][0]))
+        return True
 
     def enviarFacturaPrueba(self):
 
@@ -738,177 +1018,161 @@ class Connector:
                     raise Exception(info)
             return True  # se crea exitosamente
 
-    def enviarFacturas(
-        self,
-        facturas_escogidas: Optional[List[str]] = None,
-        start_at: Optional[str] = None,
-    ):
-        """create readed invoices. You can use facturas_escogidas to send a group of invoices instead to send all them.\n
-           If you whan continue the creation from a specific invoice use start_at with the invoice number.
+    # def enviarFacturas(self):
+    #     """create readed invoices. You can use facturas_escogidas to send a group of invoices instead to send all them.\n
+    #        If you whan continue the creation from a specific invoice use start_at with the invoice number.
 
-        Parameters
-        ----------
-        facturas_escogidas : Optional[List[str]] = None
-            list of invoice numbers that must be created. If None is passed so all readed invoiced will be created
-        start_at : Optional[str] = None
-            reference invoice to start to create them. Useful if the process crashes and you don't want to begin the creation from the first invoice
+    #     Parameters
+    #     ----------
+    #     facturas_escogidas : Optional[List[str]] = None
+    #         list of invoice numbers that must be created. If None is passed so all readed invoiced will be created
+    #     start_at : Optional[str] = None
+    #         reference invoice to start to create them. Useful if the process crashes and you don't want to begin the creation from the first invoice
 
-        """
+    #     """
 
-        print(
-            "\n###########################\nEnvio Masivo de facturas\n###########################\n"
-        )
-        # concat dataframes with left join
-        join1 = self.ventasPProducto.merge(
-            self.productos, left_on="Producto", right_on="name", how="left"
-        )
-        join2 = pd.merge(
-            join1,
-            self.ventasPCliente,
-            left_on="No. Factura",
-            right_on="Factura No.",
-            how="right",
-        )
+    #     print(
+    #         "\n###########################\nEnvio Masivo de facturas\n###########################\n"
+    #     )
 
-        # numeros de facturas .
+    #     # numeros de facturas .
+    #     facturas = self._load_pirpos_invoices_per_client()
+    #     if facturas_escogidas != None:
+    #         facturas = facturas_escogidas
+    #     if facturas_escogidas == None and start_at != None:
+    #         mask = join2["No. Factura"] == start_at
+    #         index = join2["No. Factura"].index[mask].tolist()
+    #         facturas = join2.loc[index[0] :, "No. Factura"].unique()
+    #     # revisa cada factura
 
-        facturas = join2["No. Factura"].unique()
-        if facturas_escogidas != None:
-            facturas = facturas_escogidas
-        if facturas_escogidas == None and start_at != None:
-            mask = join2["No. Factura"] == start_at
-            index = join2["No. Factura"].index[mask].tolist()
-            facturas = join2.loc[index[0] :, "No. Factura"].unique()
-        # revisa cada factura
+    #     erroresBackUp = {}
+    #     contador_errores = 0
+    #     size = len(facturas)
+    #     for factura in facturas:
 
-        erroresBackUp = {}
-        contador_errores = 0
-        size = len(facturas)
-        for factura in facturas:
+    #         # selecciona todos los datos asociados a esa factura
+    #         mask = join2["No. Factura"] == factura
+    #         # revisa si es factura POS o Electronica
+    #         prefijoIdentificado, numeroFactura = Utils._revisarFactura(
+    #             factura, [".", "LL"]
+    #         )  # dejar estas variables globales en todo el programa ###########
+    #         tipoComprobante = "POS" if prefijoIdentificado == "LL" else "FE"
 
-            # selecciona todos los datos asociados a esa factura
-            mask = join2["No. Factura"] == factura
-            # revisa si es factura POS o Electronica
-            prefijoIdentificado, numeroFactura = Utils._revisarFactura(
-                factura, [".", "LL"]
-            )  # dejar estas variables globales en todo el programa ###########
-            tipoComprobante = "POS" if prefijoIdentificado == "LL" else "FE"
+    #         # de todo el dataframe obtiene solo los datos de la factura de interes
+    #         datosFacturai = join2[mask]
+    #         # reinicia index de las filas
+    #         datosFacturai = datosFacturai.reset_index(drop=True)
 
-            # de todo el dataframe obtiene solo los datos de la factura de interes
-            datosFacturai = join2[mask]
-            # reinicia index de las filas
-            datosFacturai = datosFacturai.reset_index(drop=True)
+    #         # fecha de la factura
+    #         fecha = datosFacturai.loc[0, "Fecha"]
 
-            # fecha de la factura
-            fecha = datosFacturai.loc[0, "Fecha"]
+    #         # obtiene informacion del cliente
+    #         documentoCliente = int(datosFacturai.loc[0, "Documento"])
+    #         # print(type(documentoCliente))
 
-            # obtiene informacion del cliente
-            documentoCliente = int(datosFacturai.loc[0, "Documento"])
-            # print(type(documentoCliente))
+    #         # obtiene los items de la factura
+    #         items = []
+    #         total_Productos = 0
+    #         for i in range(len(datosFacturai)):
+    #             itemInfo = {}
+    #             itemInfo["code"] = datosFacturai.loc[i, "Código_y"]
+    #             itemInfo["description"] = unidecode.unidecode(
+    #                 datosFacturai.loc[i, "Producto"]
+    #             )
+    #             itemInfo["quantity"] = datosFacturai.loc[i, "Cantidad"]
 
-            # obtiene los items de la factura
-            items = []
-            total_Productos = 0
-            for i in range(len(datosFacturai)):
-                itemInfo = {}
-                itemInfo["code"] = datosFacturai.loc[i, "Código_y"]
-                itemInfo["description"] = unidecode.unidecode(
-                    datosFacturai.loc[i, "Producto"]
-                )
-                itemInfo["quantity"] = datosFacturai.loc[i, "Cantidad"]
+    #             if str(itemInfo["code"]) == "nan":
+    #                 print(itemInfo["description"])
 
-                if str(itemInfo["code"]) == "nan":
-                    print(itemInfo["description"])
+    #             if itemInfo["code"] != "61f18fa3290b5f169086d712":
+    #                 # se fija el impuesto del 8% porque siempre es comida
+    #                 itemInfo["price"] = round(
+    #                     datosFacturai.loc[i, "Total_x"]
+    #                     / (datosFacturai.loc[i, "Cantidad"] * 1.08),
+    #                     2,
+    #                 )
 
-                if itemInfo["code"] != "61f18fa3290b5f169086d712":
-                    # se fija el impuesto del 8% porque siempre es comida
-                    itemInfo["price"] = round(
-                        datosFacturai.loc[i, "Total_x"]
-                        / (datosFacturai.loc[i, "Cantidad"] * 1.08),
-                        2,
-                    )
+    #                 valorBase = round(itemInfo["price"] * itemInfo["quantity"], 2)
+    #                 impuesto = round(valorBase * 0.08, 2)
+    #                 valorItem = round(valorBase + impuesto, 2)
+    #                 total_Productos += valorItem
+    #                 # total_Productos += round(itemInfo["price"]*itemInfo["quantity"]+itemInfo["price"]*itemInfo["quantity"]*0.08,2)
 
-                    valorBase = round(itemInfo["price"] * itemInfo["quantity"], 2)
-                    impuesto = round(valorBase * 0.08, 2)
-                    valorItem = round(valorBase + impuesto, 2)
-                    total_Productos += valorItem
-                    # total_Productos += round(itemInfo["price"]*itemInfo["quantity"]+itemInfo["price"]*itemInfo["quantity"]*0.08,2)
+    #                 # total_Productos += round(itemInfo["price"]*itemInfo["quantity"],2)+round(itemInfo["price"]*itemInfo["quantity"]*0.08,2)
 
-                    # total_Productos += round(itemInfo["price"]*itemInfo["quantity"],2)+round(itemInfo["price"]*itemInfo["quantity"]*0.08,2)
+    #                 # print("valorUnitario = {0}, cantidad = {1}".format(itemInfo["price"],itemInfo["quantity"],valorBase,impuesto,valorItem))
+    #                 # print("valorBase = {0} => {1}".format(itemInfo["price"]*itemInfo["quantity"], valorBase))
+    #                 # print("impuesto = {0} => {1}".format(valorBase*0.08, impuesto))
+    #                 # print("totalItem = {0} => {1}".format(valorBase+impuesto, valorItem))
+    #                 # print("\n")
+    #                 itemInfo["taxes"] = [{"id": 7081}]
+    #             else:
+    #                 # se fija el impuesto del 8% porque siempre es comida
+    #                 itemInfo["price"] = round(
+    #                     datosFacturai.loc[i, "Total_x"]
+    #                     / (datosFacturai.loc[i, "Cantidad"]),
+    #                     2,
+    #                 )
+    #                 total_Productos += itemInfo["price"] * itemInfo["quantity"]
+    #                 itemInfo["taxes"] = []
+    #                 print("entra")
 
-                    # print("valorUnitario = {0}, cantidad = {1}".format(itemInfo["price"],itemInfo["quantity"],valorBase,impuesto,valorItem))
-                    # print("valorBase = {0} => {1}".format(itemInfo["price"]*itemInfo["quantity"], valorBase))
-                    # print("impuesto = {0} => {1}".format(valorBase*0.08, impuesto))
-                    # print("totalItem = {0} => {1}".format(valorBase+impuesto, valorItem))
-                    # print("\n")
-                    itemInfo["taxes"] = [{"id": 7081}]
-                else:
-                    # se fija el impuesto del 8% porque siempre es comida
-                    itemInfo["price"] = round(
-                        datosFacturai.loc[i, "Total_x"]
-                        / (datosFacturai.loc[i, "Cantidad"]),
-                        2,
-                    )
-                    total_Productos += itemInfo["price"] * itemInfo["quantity"]
-                    itemInfo["taxes"] = []
-                    print("entra")
+    #             # agrega item a la lista
+    #             items.append(itemInfo)
 
-                # agrega item a la lista
-                items.append(itemInfo)
+    #         # datos del pago
+    #         formaPago = self._formasPago[datosFacturai.loc[0, "Forma de Pago"]]
+    #         # totalPagado = total_Productos+math.floor(int(100*total_Productos*0.08))/100
+    #         # totalPagado = datosFacturai.loc[i,"Total_y"]
+    #         # totalPagado = 4999.99
 
-            # datos del pago
-            formaPago = self._formasPago[datosFacturai.loc[0, "Forma de Pago"]]
-            # totalPagado = total_Productos+math.floor(int(100*total_Productos*0.08))/100
-            # totalPagado = datosFacturai.loc[i,"Total_y"]
-            # totalPagado = 4999.99
+    #         # print(totalPagado)
+    #         # print(round(total_Productos))
+    #         totalPagado = round(total_Productos)
+    #         # print(totalPagado)
+    #         # totalPagado = 47001
+    #         # print(totalPagado)
+    #         # se envia factura
+    #         try:
+    #             result = self.postInvoice(
+    #                 tipoComprobante,
+    #                 fecha,
+    #                 numeroFactura,
+    #                 documentoCliente,
+    #                 items,
+    #                 totalPagado,
+    #                 formaPago,
+    #             )
+    #             if result == True:
+    #                 print(
+    #                     "factura {0} {1} creada\n".format(
+    #                         tipoComprobante, numeroFactura
+    #                     )
+    #                 )
+    #             else:
+    #                 print(
+    #                     "factura {0} {1} ya existe\n".format(
+    #                         tipoComprobante, numeroFactura
+    #                     )
+    #                 )
 
-            # print(totalPagado)
-            # print(round(total_Productos))
-            totalPagado = round(total_Productos)
-            # print(totalPagado)
-            # totalPagado = 47001
-            # print(totalPagado)
-            # se envia factura
-            try:
-                result = self.postInvoice(
-                    tipoComprobante,
-                    fecha,
-                    numeroFactura,
-                    documentoCliente,
-                    items,
-                    totalPagado,
-                    formaPago,
-                )
-                if result == True:
-                    print(
-                        "factura {0} {1} creada\n".format(
-                            tipoComprobante, numeroFactura
-                        )
-                    )
-                else:
-                    print(
-                        "factura {0} {1} ya existe\n".format(
-                            tipoComprobante, numeroFactura
-                        )
-                    )
+    #         except Exception as e:
+    #             print(
+    #                 "\nError en factura {0} {1}\n".format(
+    #                     tipoComprobante, numeroFactura
+    #                 )
+    #             )
+    #             print(e)
+    #             print()
+    #             contador_errores += 1
+    #             erroresBackUp[contador_errores] = {
+    #                 "numero factura": numeroFactura,
+    #                 "prefijo": prefijoIdentificado,
+    #                 "error": str(e),
+    #             }
 
-            except Exception as e:
-                print(
-                    "\nError en factura {0} {1}\n".format(
-                        tipoComprobante, numeroFactura
-                    )
-                )
-                print(e)
-                print()
-                contador_errores += 1
-                erroresBackUp[contador_errores] = {
-                    "numero factura": numeroFactura,
-                    "prefijo": prefijoIdentificado,
-                    "error": str(e),
-                }
-
-        with open("errores_facturas.json", "w") as json_file:
-            json.dump(erroresBackUp, json_file, indent=6)
-        print(
-            "\n###########################\nFin Envio Masivo de facturas\n###########################\n"
-        )
+    #     with open("errores_facturas.json", "w") as json_file:
+    #         json.dump(erroresBackUp, json_file, indent=6)
+    #     print(
+    #         "\n###########################\nFin Envio Masivo de facturas\n###########################\n"
+    #     )

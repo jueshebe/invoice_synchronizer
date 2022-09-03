@@ -274,37 +274,6 @@ class Utils:
 
         return file  # archio con la numeracion correcta
 
-    def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, int]:
-        """
-        Obtiene la numeracion y tipo de factura
-
-        Parameters
-        ----------
-        factura : str
-            string con el numero de factura y el prefijo.
-        prefijosPOS: [str,str]
-            prefijos asociados a una factura POS, todo lo que no se encuentre aca sera tomado en cuenta como factura electronica
-
-        Returns
-        -------
-        tuple(str,int)
-            tupla con el prefijo y la numeracion separadas
-        """
-
-        # identificar tipo de factura
-        prefijoIdentificado = None
-        if sum([True if prefijo in factura else False for prefijo in prefijosPOS]) > 0:
-            prefijoIdentificado = "LL"  # el prefijo es POS ---------------------------------parametro que se puede dejar en un yml
-        else:
-            prefijoIdentificado = ""  # factura electronica -----------------------------------se puede dejar en un yml
-
-        # se obtiene el numero de la factura
-        numero = int(
-            "".join([caracter if caracter.isdigit() else "" for caracter in factura])
-        )
-
-        return prefijoIdentificado, numero
-
     @staticmethod
     def revisarDocumentos(
         productos: pd, clientesSiigo: pd, ventasPProducto: pd, ventasPCliente: pd
@@ -489,7 +458,39 @@ def read_pirpos_product(product: Dict) -> List[Dict[str, Union[str, int]]]:
         raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
 
 
-def read_invoice_per_client(invoice_info: Dict) -> List[Dict[str, Union[str, int]]]:
+def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, int]:
+    """
+    Obtiene la numeracion y tipo de factura
+
+    Parameters
+    ----------
+    factura : str
+        string con el numero de factura y el prefijo.
+    prefijosPOS: [str,str]
+        prefijos asociados a una factura POS, todo lo que no se encuentre aca sera tomado en cuenta como factura electronica
+
+    Returns
+    -------
+    tuple(str,int)
+        tupla con el prefijo y la numeracion separadas
+    """
+
+    # identificar tipo de factura
+    prefijoIdentificado = None
+    if sum([True if prefijo in factura else False for prefijo in prefijosPOS]) > 0:
+        prefijoIdentificado = "LL"  # el prefijo es POS ---------------------------------parametro que se puede dejar en un yml
+    else:
+        prefijoIdentificado = ""  # factura electronica -----------------------------------se puede dejar en un yml
+
+    # se obtiene el numero de la factura
+    numero = int(
+        "".join([caracter if caracter.isdigit() else "" for caracter in factura])
+    )
+
+    return prefijoIdentificado, numero
+
+
+def read_invoice_per_client_pirpos(invoice_info: Dict) -> List[Dict[str, Union[str, int]]]:
     """Parse downloaded info about a invoice_per_client and return it as a cleaned list of dictionaries
         one invoice can have many products, one element is returned for each product
 
@@ -498,16 +499,20 @@ def read_invoice_per_client(invoice_info: Dict) -> List[Dict[str, Union[str, int
     List[Dict[str,Union[str,int]]]
 
     """
-
     try:
+
+        prefix, _ = _revisarFactura(invoice_info["number"], ["LL"])
         invoiceInfo = {
             "number": invoice_info["number"],
-            "created": invoice_info["paid"].get("createdOn"),
+            "prefix": prefix,
             "seq": invoice_info["seq"],
+            "created": invoice_info["paid"].get("createdOn"),
             "client_name": invoice_info["client"]["name"],
             "client_email": invoice_info["client"].get("email"),
             "client_phone": invoice_info["client"].get("phone"),
-            "client_document": invoice_info["client"].get("document",constants.DEFAULT_CLIENT["document"]),
+            "client_document": invoice_info["client"].get(
+                "document", constants.DEFAULT_CLIENT["document"]
+            ),
             "client_check_digit": invoice_info["client"].get("checkDigit"),
             "client_address": invoice_info["client"].get("address"),
             "client_document_type": invoice_info["client"].get("docuentName"),
@@ -523,25 +528,28 @@ def read_invoice_per_client(invoice_info: Dict) -> List[Dict[str, Union[str, int
             "client_country_code": invoice_info["client"]
             .get("cityDetail", {})
             .get("countryCode"),
-            "paid": 
-                [
-                    {"pay_method":subpay['paymentMethod'],"value":subpay['value']}
-                    for subpay in invoice_info.get("paid", {}).get(
-                        "paymentMethodValue", [{}]
-                    )
-                ]
-            ,
-            "taxes": 
-                [
-                    {"name":subtax['name'],"value":subtax['value']}
-                    for subtax in invoice_info.get("taxes", [])
-                ]
-            ,
-            "products": 
-                [
-                    {"id":subprod.get('idInternal'),"name":subprod.get('name'),"price":subprod.get('price'),"quantity":subprod.get('quantity'),"tax_name":subprod.get('taxName'),"tax_value":subprod.get('tax'),"discount":subprod.get('discount')}
-                    for subprod in invoice_info.get("products", [])
-                ],
+            "paid": [
+                {"pay_method": subpay["paymentMethod"], "value": subpay["value"]}
+                for subpay in invoice_info.get("paid", {}).get(
+                    "paymentMethodValue", [{}]
+                )
+            ],
+            "taxes": [
+                {"name": subtax["name"], "value": subtax["value"]}
+                for subtax in invoice_info.get("taxes", [])
+            ],
+            "products": [
+                {
+                    "id": subprod.get("idInternal"),
+                    "name": subprod.get("name"),
+                    "price": subprod.get("price"),
+                    "quantity": subprod.get("quantity"),
+                    "tax_name": subprod.get("taxName"),
+                    "tax_value": subprod.get("tax"),
+                    "discount": subprod.get("discount"),
+                }
+                for subprod in invoice_info.get("products", [])
+            ],
             "total_bruto": invoice_info["totalBruto"],
             "total_discount": invoice_info["totalDiscount"],
             "sub_total": invoice_info["subTotal"],
@@ -553,7 +561,26 @@ def read_invoice_per_client(invoice_info: Dict) -> List[Dict[str, Union[str, int
     except Exception as e:
         raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
 
+def read_invoice_per_client_siigo(invoice_info: Dict) -> List[Dict[str, Union[str, int]]]:
+    """Parse downloaded info about a invoice_per_client and return it as a cleaned list of dictionaries
+        one invoice can have many products, one element is returned for each product
 
+    Returns
+    -------
+    List[Dict[str,Union[str,int]]]
+
+    """
+    code_2_pirpos_prefix={"1":"LL","3":""}
+    try:
+        
+        invoiceInfo = {
+            "DocNumber":invoice_info["DocNumber"],
+            "DocCode": code_2_pirpos_prefix[invoice_info["DocCode"]],
+
+        }
+        return invoiceInfo
+    except Exception as e:
+        raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
 
 def clean_document(documentoCliente: str) -> int:
     """
@@ -586,7 +613,10 @@ def clean_document(documentoCliente: str) -> int:
         documentoCliente = 222222222222
     return int(str(documentoCliente))
 
-def get_missing_clients(pirpos_clients:pd.DataFrame, siigo_clients:pd.DataFrame)-> pd.DataFrame:
+
+def get_missing_clients(
+    pirpos_clients: pd.DataFrame, siigo_clients: pd.DataFrame
+) -> pd.DataFrame:
     """get missing clients in siigo
 
     Parameters
@@ -603,7 +633,32 @@ def get_missing_clients(pirpos_clients:pd.DataFrame, siigo_clients:pd.DataFrame)
     """
 
     merged_clientes = pirpos_clients.merge(
-            siigo_clients, left_on="document", right_on="Identification", how="left"
-        )
+        siigo_clients, left_on="document", right_on="Identification", how="left"
+    )
     missing_clients = pirpos_clients[merged_clientes["Identification"].isna()]
     return missing_clients
+
+
+def get_missing_products(
+    pirpos_products: pd.DataFrame, siigo_products: pd.DataFrame
+) -> pd.DataFrame:
+    """get missing Products in siigo
+
+    Parameters
+    ----------
+    pirpos_products : pd.DataFrame
+        registered products on pirpos
+    siigo_products : pd.DataFrame
+        registered products on siigo
+
+    Returns
+    -------
+    pd.DataFrame
+        pandas Dataframe with missing products
+    """
+
+    merged_products = pirpos_products.merge(
+        siigo_products, left_on="pirpos_id", right_on="Code", how="left"
+    )
+    missing_products = pirpos_products[merged_products["Code"].isna()]
+    return missing_products
