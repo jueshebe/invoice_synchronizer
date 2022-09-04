@@ -967,6 +967,7 @@ class Connector:
                 {
                     "id": constants.PAYMETHOD_PIRPOS2SIIGO[paiment_info["pay_method"]],
                     "value": paiment_info["value"],  # revisar para facturas normales
+                    "due_date": invoice_info["created"][0:10]
                 }
                 for paiment_info in paiments_info
             ]

@@ -702,5 +702,5 @@ def get_missing_invoices(
     merged_invoices = pirpos_invoices.merge(
         siigo_invoices, left_on="number", right_on="DocNumber", how="left"
     )
-    missing_invoices = pirpos_invoices[merged_invoices["DocNumber"].isna()]
+    missing_invoices = merged_invoices[merged_invoices["DocNumber"].isnull()]
     return missing_invoices
