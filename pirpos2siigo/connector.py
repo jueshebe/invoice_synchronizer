@@ -132,9 +132,9 @@ class Connector:
         with open(file_path) as file:
             data = json.load(file)
 
-        constants.PAYMETHOD_PIRPOS2SIIGO = (data["pay_method_pirpos2siigo"],)
-        constants.TAXES_PIRPOS2SIIGO = (data["taxes_pirpos2siigo"],)
-        constants.INVOICE_TYPE_PIRPOS2SIIGO = (data["invoice_type_pirpos2siigo"],)
+        constants.PAYMETHOD_PIRPOS2SIIGO = data["pay_method_pirpos2siigo"]
+        constants.TAXES_PIRPOS2SIIGO = data["taxes_pirpos2siigo"]
+        constants.INVOICE_TYPE_PIRPOS2SIIGO = data["invoice_type_pirpos2siigo"]
         constants.DEFAULT_CLIENT = data["default_client"]
 
     # cargar clientes
@@ -395,154 +395,6 @@ class Connector:
 
     def _load_pirpos_invoices_per_client(
         self, init_day: str, end_day: str, step_days: int = 10
-    ) -> pd.DataFrame:
-        """get invoices per client on pirpos
-
-        Parameters
-        ----------
-        init_day : str
-            initial time to download invoices. year-month-day
-        end_day : str
-            end time to download invoices year-month-day
-        batch_invoices : int, optional
-            days used to download invoices in steps, by default 10
-
-        Returns
-        -------
-        pd.DataFrame
-            Pirpos invoices per client in a range of time
-        """
-
-        init_day = datetime.datetime.strptime(init_day, "%Y-%m-%d")
-        end_day = datetime.datetime.strptime(end_day, "%Y-%m-%d") + datetime.timedelta(
-            days=1
-        )
-        if init_day > end_day:
-            raise ErrorLoadingPirposInvoices("end_day must be greater than init_day")
-
-        days = 0
-        invoices_per_client = []
-        headers = {
-            "Accept": "application/json, text/plain, */*",
-            "Referer": "https://app.pirpos.com/",
-            "Authorization": f"Bearer {self.__pirpos_access_token}",
-        }
-        payload = {}
-
-        while True:
-            time1 = init_day + datetime.timedelta(days=days)
-            time2 = (
-                init_day + datetime.timedelta(days=days + step_days)
-                if init_day + datetime.timedelta(days=days + step_days) <= end_day
-                else end_day
-            )
-            days += step_days
-            date1_str = datetime.datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
-            date2_str = datetime.datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
-            url = f"https://api.pirpos.com/reports/reportSalesInvoices?status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
-            response = requests.request("GET", url, headers=headers, data=payload)
-            if response.ok == False:
-                raise ErrorLoadingPirposInvoices(
-                    "Can't download invoices per client from pirpos"
-                )
-            data: List[Dict] = response.json()
-
-            for invoice_info in data:
-                invoices_per_client.extend(
-                    [utils.read_invoice_per_client(invoice_info)]
-                )
-            if time2 >= end_day:
-                break
-
-        invoices_per_client = pd.json_normalize(invoices_per_client)
-        invoices_per_client = invoices_per_client.fillna("")
-        invoices_per_client = invoices_per_client.astype(str)
-        invoices_per_client["client_document"] = invoices_per_client[
-            "client_document"
-        ].apply(utils.clean_document)
-        return invoices_per_client
-
-    def _load_siigo_invoices(
-        self, init_day: str, end_day: str, step_days: int = 10, batch_invoices=200
-    ) -> Tuple[bool, pd.DataFrame]:
-        """get invoices per client on pirpos
-
-        Parameters
-        ----------
-        init_day : str
-            initial time to download invoices. year-month-day
-        end_day : str
-            end time to download invoices year-month-day
-        batch_invoices : int, optional
-            days used to download invoices in steps, by default 10
-
-        Returns
-        -------
-        pd.DataFrame
-            Pirpos invoices per client in a range of time
-        """
-
-        init_day = datetime.datetime.strptime(init_day, "%Y-%m-%d")
-        end_day = datetime.datetime.strptime(end_day, "%Y-%m-%d") + datetime.timedelta(
-            days=1
-        )
-        if init_day > end_day:
-            raise ErrorLoadingPirposInvoices("end_day must be greater than init_day")
-
-        days = 0
-        invoices_per_client = []
-        url = f"https://services.siigo.com/ACReportApi/api/v1/Report/post"
-        headers = {
-            "authority": "services.siigo.com",
-            "accept": "application/json, text/plain, */*",
-            "authorization": self.__siigo_access_token,
-            "content-type": "application/json",
-        }
-        
-        while True:
-            time1 = init_day + datetime.timedelta(days=days)
-            time2 = (
-                init_day + datetime.timedelta(days=days + step_days)
-                if init_day + datetime.timedelta(days=days + step_days) <= end_day
-                else end_day
-            )
-            days += step_days
-            date1_str = datetime.datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
-            date2_str = datetime.datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
-            payload = {
-                "Id":5349,
-                "Skip":0,
-                "Take":2000,#cuidado esto puede danarse cuando las ventas aumenten mucho 
-                "Sort":" ",
-                "FilterCriterias":"[{\"Field\":\"AccountID\",\"FilterType\":68,\"OperatorType\":0,\"Value\":[],\"ValueUI\":\"\",\"Source\":\"Account\"},{\"Field\":\"DocDate\",\"FilterType\":76,\"OperatorType\":9,\"Value\":[\""+init_day.strftime("%Y%m%d")+"\",\""+end_day.strftime("%Y%m%d")+"\"]},{\"Field\":\"_var_DocClass\",\"FilterType\":7,\"OperatorType\":0,\"Value\":[\"1\"],\"ValueUI\":\"Factura de venta\",\"Source\":\"SalesTransactionEnum\"},{\"Field\":\"_var_CreatedByUser\",\"FilterType\":6,\"OperatorType\":0,\"Value\":[],\"ValueUI\":\"\",\"Source\":\"12\"}]",
-                "GetTotalCount":True,
-                "GridOrderCriteria":None
-            }
-            
-            response = requests.request("POST", url, headers=headers, json=payload)
-            if response.ok == False:
-                raise ErrorLoadingSiigoInvoices(
-                    "Can't download invoices from Siigo"
-                )
-            data: List[Dict] = response.json()["data"]["Value"]["Table"]
-
-            for invoice_info in data:
-                invoices_per_client.extend(
-                    [utils.read_invoice_per_client_siigo(invoice_info)]
-                )
-            if time2 >= end_day:
-                break
-        
-        if len(invoices_per_client) > 0:
-            invoices_per_client = pd.json_normalize(invoices_per_client)
-            invoices_per_client = invoices_per_client.fillna("")
-            return True, invoices_per_client
-        else:
-            return False, None
-            
-
-    def _load_pirpos_invoices_per_client(
-        self, init_day: str, end_day: str, step_days: int = 10
     ) -> Tuple[bool, pd.DataFrame]:
         """get invoices per client on pirpos
 
@@ -603,13 +455,93 @@ class Connector:
             if time2 >= end_day:
                 break
 
-        if len(invoices_per_client)>0:
+        if len(invoices_per_client) > 0:
             invoices_per_client = pd.json_normalize(invoices_per_client)
             invoices_per_client = invoices_per_client.fillna("")
             invoices_per_client = invoices_per_client.astype(str)
             invoices_per_client["client_document"] = invoices_per_client[
                 "client_document"
             ].apply(utils.clean_document)
+            return True, invoices_per_client
+        else:
+            return False, None
+
+    def _load_siigo_invoices(
+        self, init_day: str, end_day: str, step_days: int = 10, batch_invoices=200
+    ) -> Tuple[bool, pd.DataFrame]:
+        """get created invoices from siigo
+
+        Parameters
+        ----------
+        init_day : str
+            initial time to download invoices. year-month-day
+        end_day : str
+            end time to download invoices year-month-day
+        batch_invoices : int, optional
+            days used to download invoices in steps, by default 10
+
+        Returns
+        -------
+        pd.DataFrame
+            Siigo created invoices in a range of time
+        """
+
+        init_day = datetime.datetime.strptime(init_day, "%Y-%m-%d")
+        end_day = datetime.datetime.strptime(end_day, "%Y-%m-%d") + datetime.timedelta(
+            days=0
+        )
+        if init_day > end_day:
+            raise ErrorLoadingSiigoInvoices("end_day must be greater than init_day")
+
+        days = 0
+        invoices_per_client = []
+        url = f"https://services.siigo.com/ACReportApi/api/v1/Report/post"
+        headers = {
+            "authority": "services.siigo.com",
+            "accept": "application/json, text/plain, */*",
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+        }
+
+        while True:
+            time1 = init_day + datetime.timedelta(days=days)
+            time2 = (
+                init_day + datetime.timedelta(days=days + step_days)
+                if init_day + datetime.timedelta(days=days + step_days) <= end_day
+                else end_day
+            )
+            days += step_days
+            date1_str = datetime.datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
+            date2_str = datetime.datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
+            payload = {
+                "Id": 5349,
+                "Skip": 0,
+                "Take": 2000,  # cuidado esto puede danarse cuando las ventas aumenten mucho
+                "Sort": " ",
+                "FilterCriterias": '[{"Field":"AccountID","FilterType":68,"OperatorType":0,"Value":[],"ValueUI":"","Source":"Account"},{"Field":"DocDate","FilterType":76,"OperatorType":9,"Value":["'
+                + time1.strftime("%Y%m%d")
+                + '","'
+                + time2.strftime("%Y%m%d")
+                + '"]},{"Field":"_var_DocClass","FilterType":7,"OperatorType":0,"Value":["1"],"ValueUI":"Factura de venta","Source":"SalesTransactionEnum"},{"Field":"_var_CreatedByUser","FilterType":6,"OperatorType":0,"Value":[],"ValueUI":"","Source":"12"}]',
+                "GetTotalCount": True,
+                "GridOrderCriteria": None,
+            }
+
+            response = requests.request("POST", url, headers=headers, json=payload)
+            if response.ok == False:
+                raise ErrorLoadingSiigoInvoices("Can't download invoices from Siigo")
+            data: List[Dict] = response.json()["data"]["Value"]["Table"]
+
+            for invoice_info in data:
+                invoices_per_client.extend(
+                    [utils.read_invoice_per_client_siigo(invoice_info)]
+                )
+            if time2 >= end_day or len(data) == 0:
+                break
+
+        if len(invoices_per_client) > 0:
+            invoices_per_client = pd.json_normalize(invoices_per_client)
+            invoices_per_client = invoices_per_client.fillna("")
             return True, invoices_per_client
         else:
             return False, None
@@ -876,12 +808,6 @@ class Connector:
             "unit_label": "unidad",
             "reference": "REF1",
             "description": ".",
-            # "additional_fields": {
-            #     "barcode": "B0123",
-            #     "brand": "Gef",
-            #     "tariff": "151612",
-            #     "model": "Loiry"
-            # }
         }
 
         headers = {
@@ -898,83 +824,32 @@ class Connector:
                 raise Exception(str(response.json()["Errors"][0]))
         return True
 
-    def enviarFacturaPrueba(self):
 
-        item = []
-        itemInfo = {}
-        itemInfo["code"] = "61d7d3349ab18205d7997fa0"
-        itemInfo["description"] = "Jugos Hit mango"
-        itemInfo["quantity"] = 1
-        itemInfo["price"] = 3000
-        # total_Productos += math.ceil((math.ceil(itemInfo["price"]*itemInfo["quantity"]*100)/100+math.ceil(itemInfo["price"]*itemInfo["quantity"]*0.08*100)/100)*100)/100
-        total_Productos = itemInfo["price"] * itemInfo["quantity"] + round(
-            itemInfo["price"] * itemInfo["quantity"] * 0.08, 2
-        )
-        # print("dato1 {0}   dato2  {1}\n".format(itemInfo["price"]*itemInfo["quantity"],itemInfo["price"]*itemInfo["quantity"]*0.08))
-        # print("item "+ str(itemInfo["price"]))
-        itemInfo["taxes"] = [{"id": 7081}]
-        item.append(itemInfo)
-
-        body = {
-            "document": {"id": self._tipoComprobante["POS"]},
-            "number": 18,
-            "date": "2022-01-01",
-            "customer": {"identification": str(222222222222), "branch_office": 0},
-            "seller": 709,
-            "observations": "Observaciones",
-            "items": item,
-            "payments": [
-                {
-                    "id": 3025,
-                    "value": total_Productos  # ,
-                    # "due_date": "2021-03-19"
-                }
-            ],
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": self.access_token,
-            "Connection": "close",
-        }
-        url = "https://api.siigo.com/v1/invoices"
-
-        response = requests.post(url, data=str(body), headers=headers)
-        # print(response.text)
 
     def postInvoice(
         self,
-        tipoComprobante,
-        fecha,
-        invoiceNumber,
-        identificacion,
+        invoice_type,
+        invoice_date,
+        invoice_number,
+        client_document,
         items,
-        pyment,
-        method,
+        payments,
     ):
 
         body = {
-            "document": {"id": self._tipoComprobante[tipoComprobante]},
-            "number": invoiceNumber,
-            "date": fecha.strftime("%Y-%m-%d"),
-            "customer": {"identification": str(identificacion), "branch_office": 0},
+            "document": {"id": invoice_type},
+            "number": invoice_number,
+            "date": invoice_date[0:10],
+            "customer": {"identification": str(client_document), "branch_office": 0},
             "seller": 709,
             "observations": "Observaciones",
             "items": items,
-            "payments": [
-                {
-                    "id": method,
-                    "value": pyment,
-                    "due_date": (fecha + datetime.timedelta(days=10)).strftime(
-                        "%Y-%m-%d"
-                    ),  # revisar para facturas normales
-                }
-            ],
+            "payments": payments,
             "retentions": [{"id": 18091}],
         }
         headers = {
             "Content-Type": "application/json",
-            "Authorization": self.access_token,
-            "Connection": "close",
+            "Authorization": self.__siigo_access_token,
         }
         url = "https://api.siigo.com/v1/invoices"
 
@@ -990,9 +865,10 @@ class Connector:
 
                 elif response.json()["Errors"][0]["Code"] == "duplicated_document":
                     # para relizar otra peticion y ayudar al sistema
-                    self.enviarFacturaPrueba()
+                    #self.enviarFacturaPrueba()
+                    print(response.status_code)
                     print("duplicated_document error. try to send it again")
-                    time.sleep(0.8)
+                    time.sleep(2)
                     if i < 29:
                         continue
                     else:
@@ -1009,7 +885,14 @@ class Connector:
                             body["payments"][0]["value"], pyment
                         )
                     )
-                    body["payments"][0]["value"] = pyment
+                    body[
+                        "payments"
+                    ] = [  # este ajuste elimina otros metedos de pago asociados !!cuidado!!
+                        {
+                            "id": body["payments"][0]["id"],
+                            "value": pyment,
+                        }
+                    ]
                     continue
 
                 else:
@@ -1018,161 +901,102 @@ class Connector:
                     raise Exception(info)
             return True  # se crea exitosamente
 
-    # def enviarFacturas(self):
-    #     """create readed invoices. You can use facturas_escogidas to send a group of invoices instead to send all them.\n
-    #        If you whan continue the creation from a specific invoice use start_at with the invoice number.
+    def update_invoices(self, in_date: str, end_date: str):
+        """update invoices in a range of time on siigo
 
-    #     Parameters
-    #     ----------
-    #     facturas_escogidas : Optional[List[str]] = None
-    #         list of invoice numbers that must be created. If None is passed so all readed invoiced will be created
-    #     start_at : Optional[str] = None
-    #         reference invoice to start to create them. Useful if the process crashes and you don't want to begin the creation from the first invoice
+        Parameters
+        ----------
+        in_date:str
+            initial date to update invoices
+        end_date:str
+            end date to update invoices
+        """
 
-    #     """
+        successful_pirpos,pirpos_invoices_per_client = self._load_pirpos_invoices_per_client(in_date, end_date)
+        successful_siigo, siigo_invoices = self._load_siigo_invoices(in_date, end_date)
 
-    #     print(
-    #         "\n###########################\nEnvio Masivo de facturas\n###########################\n"
-    #     )
+        if successful_pirpos and successful_siigo:
+            invoices = utils.get_missing_invoices(
+                pirpos_invoices_per_client, siigo_invoices
+            )
+            if len(invoices) == 0:
+                print("there aren't invoices to update")
+                return
 
-    #     # numeros de facturas .
-    #     facturas = self._load_pirpos_invoices_per_client()
-    #     if facturas_escogidas != None:
-    #         facturas = facturas_escogidas
-    #     if facturas_escogidas == None and start_at != None:
-    #         mask = join2["No. Factura"] == start_at
-    #         index = join2["No. Factura"].index[mask].tolist()
-    #         facturas = join2.loc[index[0] :, "No. Factura"].unique()
-    #     # revisa cada factura
+        elif successful_pirpos:
+            invoices = pirpos_invoices_per_client
+        else:
+            print("there aren't invoices to update")
+            return
 
-    #     erroresBackUp = {}
-    #     contador_errores = 0
-    #     size = len(facturas)
-    #     for factura in facturas:
+        erroresBackUp = {}
+        contador_errores = 0
+        size = len(invoices)
+        for _, invoice_info in invoices.iterrows():
 
-    #         # selecciona todos los datos asociados a esa factura
-    #         mask = join2["No. Factura"] == factura
-    #         # revisa si es factura POS o Electronica
-    #         prefijoIdentificado, numeroFactura = Utils._revisarFactura(
-    #             factura, [".", "LL"]
-    #         )  # dejar estas variables globales en todo el programa ###########
-    #         tipoComprobante = "POS" if prefijoIdentificado == "LL" else "FE"
+            invoice_type = constants.INVOICE_TYPE_PIRPOS2SIIGO[invoice_info["prefix"]]
+            invoice_number = invoice_info["seq"]
+            invoice_date = invoice_info["created"]
+            client_document = invoice_info["client_document"]
+            products = json.loads(invoice_info["products"])
+            # obtiene los items de la factura
+            items = []
+            for product_info in products:
+                product_info["tax_value"] = product_info["tax_value"] if product_info["tax_name"]!=None else 8
+                product_info["tax_name"] = product_info["tax_name"] if product_info["tax_name"]!=None else "I CONSUMO"
+                item_info = {}
+                item_info["code"] = product_info["id"]
+                item_info["description"] = unidecode.unidecode(product_info["name"])
+                item_info["quantity"] = product_info["quantity"]
+                item_info["price"] = round(
+                    product_info["price"]
+                    / (
+                        (1 + product_info["tax_value"] / 100)
+                    ),
+                    2,
+                )
 
-    #         # de todo el dataframe obtiene solo los datos de la factura de interes
-    #         datosFacturai = join2[mask]
-    #         # reinicia index de las filas
-    #         datosFacturai = datosFacturai.reset_index(drop=True)
+                item_info["taxes"] = [
+                    {"id": constants.TAXES_PIRPOS2SIIGO[product_info["tax_name"]]["id"]}
+                ]
+                items.append(item_info)
 
-    #         # fecha de la factura
-    #         fecha = datosFacturai.loc[0, "Fecha"]
+            # datos del pago
+            paiments_info = json.loads(invoice_info["paid"])
+            payments = [
+                {
+                    "id": constants.PAYMETHOD_PIRPOS2SIIGO[paiment_info["pay_method"]],
+                    "value": paiment_info["value"],  # revisar para facturas normales
+                }
+                for paiment_info in paiments_info
+            ]
 
-    #         # obtiene informacion del cliente
-    #         documentoCliente = int(datosFacturai.loc[0, "Documento"])
-    #         # print(type(documentoCliente))
+            try:
+                result = self.postInvoice(
+                    invoice_type,
+                    invoice_date,
+                    invoice_number,
+                    client_document,
+                    items,
+                    payments,
+                )
+                if result == True:
+                    print(f"factura {invoice_info['number']} creada\n")
+                else:
+                    print(f"factura {invoice_info['number']} ya existe\n")
 
-    #         # obtiene los items de la factura
-    #         items = []
-    #         total_Productos = 0
-    #         for i in range(len(datosFacturai)):
-    #             itemInfo = {}
-    #             itemInfo["code"] = datosFacturai.loc[i, "Código_y"]
-    #             itemInfo["description"] = unidecode.unidecode(
-    #                 datosFacturai.loc[i, "Producto"]
-    #             )
-    #             itemInfo["quantity"] = datosFacturai.loc[i, "Cantidad"]
+            except Exception as e:
+                print(f"Error en factura {invoice_info['number']}\n")
+                print(e)
+                print()
+                contador_errores += 1
+                erroresBackUp[contador_errores] = {
+                    "numero factura": invoice_info["number"],
+                    "error": str(e),
+                }
 
-    #             if str(itemInfo["code"]) == "nan":
-    #                 print(itemInfo["description"])
-
-    #             if itemInfo["code"] != "61f18fa3290b5f169086d712":
-    #                 # se fija el impuesto del 8% porque siempre es comida
-    #                 itemInfo["price"] = round(
-    #                     datosFacturai.loc[i, "Total_x"]
-    #                     / (datosFacturai.loc[i, "Cantidad"] * 1.08),
-    #                     2,
-    #                 )
-
-    #                 valorBase = round(itemInfo["price"] * itemInfo["quantity"], 2)
-    #                 impuesto = round(valorBase * 0.08, 2)
-    #                 valorItem = round(valorBase + impuesto, 2)
-    #                 total_Productos += valorItem
-    #                 # total_Productos += round(itemInfo["price"]*itemInfo["quantity"]+itemInfo["price"]*itemInfo["quantity"]*0.08,2)
-
-    #                 # total_Productos += round(itemInfo["price"]*itemInfo["quantity"],2)+round(itemInfo["price"]*itemInfo["quantity"]*0.08,2)
-
-    #                 # print("valorUnitario = {0}, cantidad = {1}".format(itemInfo["price"],itemInfo["quantity"],valorBase,impuesto,valorItem))
-    #                 # print("valorBase = {0} => {1}".format(itemInfo["price"]*itemInfo["quantity"], valorBase))
-    #                 # print("impuesto = {0} => {1}".format(valorBase*0.08, impuesto))
-    #                 # print("totalItem = {0} => {1}".format(valorBase+impuesto, valorItem))
-    #                 # print("\n")
-    #                 itemInfo["taxes"] = [{"id": 7081}]
-    #             else:
-    #                 # se fija el impuesto del 8% porque siempre es comida
-    #                 itemInfo["price"] = round(
-    #                     datosFacturai.loc[i, "Total_x"]
-    #                     / (datosFacturai.loc[i, "Cantidad"]),
-    #                     2,
-    #                 )
-    #                 total_Productos += itemInfo["price"] * itemInfo["quantity"]
-    #                 itemInfo["taxes"] = []
-    #                 print("entra")
-
-    #             # agrega item a la lista
-    #             items.append(itemInfo)
-
-    #         # datos del pago
-    #         formaPago = self._formasPago[datosFacturai.loc[0, "Forma de Pago"]]
-    #         # totalPagado = total_Productos+math.floor(int(100*total_Productos*0.08))/100
-    #         # totalPagado = datosFacturai.loc[i,"Total_y"]
-    #         # totalPagado = 4999.99
-
-    #         # print(totalPagado)
-    #         # print(round(total_Productos))
-    #         totalPagado = round(total_Productos)
-    #         # print(totalPagado)
-    #         # totalPagado = 47001
-    #         # print(totalPagado)
-    #         # se envia factura
-    #         try:
-    #             result = self.postInvoice(
-    #                 tipoComprobante,
-    #                 fecha,
-    #                 numeroFactura,
-    #                 documentoCliente,
-    #                 items,
-    #                 totalPagado,
-    #                 formaPago,
-    #             )
-    #             if result == True:
-    #                 print(
-    #                     "factura {0} {1} creada\n".format(
-    #                         tipoComprobante, numeroFactura
-    #                     )
-    #                 )
-    #             else:
-    #                 print(
-    #                     "factura {0} {1} ya existe\n".format(
-    #                         tipoComprobante, numeroFactura
-    #                     )
-    #                 )
-
-    #         except Exception as e:
-    #             print(
-    #                 "\nError en factura {0} {1}\n".format(
-    #                     tipoComprobante, numeroFactura
-    #                 )
-    #             )
-    #             print(e)
-    #             print()
-    #             contador_errores += 1
-    #             erroresBackUp[contador_errores] = {
-    #                 "numero factura": numeroFactura,
-    #                 "prefijo": prefijoIdentificado,
-    #                 "error": str(e),
-    #             }
-
-    #     with open("errores_facturas.json", "w") as json_file:
-    #         json.dump(erroresBackUp, json_file, indent=6)
-    #     print(
-    #         "\n###########################\nFin Envio Masivo de facturas\n###########################\n"
-    #     )
+        with open("errores_facturas.json", "w") as json_file:
+            json.dump(erroresBackUp, json_file, indent=6)
+        print(
+            "\n###########################\nFin Envio Masivo de facturas\n###########################\n"
+        )

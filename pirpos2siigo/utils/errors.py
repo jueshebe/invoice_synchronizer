@@ -25,8 +25,11 @@ class ErrorLoadingSiigoProducts(Exception):
 
 class ErrorLoadingPirposInvoices(Exception):
     pass
+
+
 class ErrorLoadingSiigoInvoices(Exception):
     pass
+
 
 class ErrorParsingPirposInvoices(Exception):
     pass

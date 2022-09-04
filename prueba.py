@@ -13,16 +13,12 @@ connector = Connector(configuration_path="configuration.JSON")
 # siigo_products = connector._Connector__load_siigo_products()
 
 # pirpos_invoices_per_product = connector._Connector__load_pirpos_invoices_per_product("2022-07-01","2022-07-31",31)
-# successful,pirpos_invoices_per_client = connector._load_pirpos_invoices_per_client(
-#     "2022-07-1", "2022-07-01"
-# )
-successful,siigo_invoices_per_client = connector._load_siigo_invoices(
-    "2022-07-1", "2022-07-02"
-)
+
 #     "2022-07-01", "2022-07-02"
 # )
 # connector.actualizarClientes()
 # connector.updateProducts()
+connector.update_invoices("2022-08-01", "2022-08-31")
 pass
 
 

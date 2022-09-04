@@ -1,9 +1,13 @@
+import json
 import pandas as pd
 import math
 from os import listdir
 from os.path import isfile, join
 from typing import Callable, List, Tuple, Dict, Union, Optional
-from pirpos2siigo.utils.errors import ErrorLoadingPirposProducts
+from pirpos2siigo.utils.errors import (
+    ErrorLoadingPirposProducts,
+    ErrorLoadingSiigoInvoices,
+)
 from pirpos2siigo.utils import constants
 
 
@@ -490,7 +494,9 @@ def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, in
     return prefijoIdentificado, numero
 
 
-def read_invoice_per_client_pirpos(invoice_info: Dict) -> List[Dict[str, Union[str, int]]]:
+def read_invoice_per_client_pirpos(
+    invoice_info: Dict,
+) -> List[Dict[str, Union[str, int]]]:
     """Parse downloaded info about a invoice_per_client and return it as a cleaned list of dictionaries
         one invoice can have many products, one element is returned for each product
 
@@ -503,7 +509,7 @@ def read_invoice_per_client_pirpos(invoice_info: Dict) -> List[Dict[str, Union[s
 
         prefix, _ = _revisarFactura(invoice_info["number"], ["LL"])
         invoiceInfo = {
-            "number": invoice_info["number"],
+            "number": prefix + str(invoice_info["seq"]),
             "prefix": prefix,
             "seq": invoice_info["seq"],
             "created": invoice_info["paid"].get("createdOn"),
@@ -528,28 +534,36 @@ def read_invoice_per_client_pirpos(invoice_info: Dict) -> List[Dict[str, Union[s
             "client_country_code": invoice_info["client"]
             .get("cityDetail", {})
             .get("countryCode"),
-            "paid": [
-                {"pay_method": subpay["paymentMethod"], "value": subpay["value"]}
-                for subpay in invoice_info.get("paid", {}).get(
-                    "paymentMethodValue", [{}]
-                )
-            ],
-            "taxes": [
-                {"name": subtax["name"], "value": subtax["value"]}
-                for subtax in invoice_info.get("taxes", [])
-            ],
-            "products": [
-                {
-                    "id": subprod.get("idInternal"),
-                    "name": subprod.get("name"),
-                    "price": subprod.get("price"),
-                    "quantity": subprod.get("quantity"),
-                    "tax_name": subprod.get("taxName"),
-                    "tax_value": subprod.get("tax"),
-                    "discount": subprod.get("discount"),
-                }
-                for subprod in invoice_info.get("products", [])
-            ],
+            "paid": json.dumps(
+                [
+                    {"pay_method": subpay["paymentMethod"], "value": subpay["value"]}
+                    for subpay in invoice_info.get("paid", {}).get(
+                        "paymentMethodValue", [{}]
+                    )
+                ]
+            ),
+            "taxes": json.dumps(
+                [
+                    {"name": subtax["name"], "value": subtax["value"]}
+                    if "name" in subtax and "value" in subtax
+                    else [{"name": "I CONSUMO", "value": 0.08}]
+                    for subtax in invoice_info.get("taxes", [{}])
+                ]
+            ),
+            "products": json.dumps(
+                [
+                    {
+                        "id": subprod.get("idInternal"),
+                        "name": subprod.get("name"),
+                        "price": subprod.get("price"),
+                        "quantity": subprod.get("quantity"),
+                        "tax_name": subprod.get("taxName"),
+                        "tax_value": subprod.get("tax"),
+                        "discount": subprod.get("discount"),
+                    }
+                    for subprod in invoice_info.get("products", [])
+                ]
+            ),
             "total_bruto": invoice_info["totalBruto"],
             "total_discount": invoice_info["totalDiscount"],
             "sub_total": invoice_info["subTotal"],
@@ -561,7 +575,10 @@ def read_invoice_per_client_pirpos(invoice_info: Dict) -> List[Dict[str, Union[s
     except Exception as e:
         raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
 
-def read_invoice_per_client_siigo(invoice_info: Dict) -> List[Dict[str, Union[str, int]]]:
+
+def read_invoice_per_client_siigo(
+    invoice_info: Dict,
+) -> List[Dict[str, Union[str, int]]]:
     """Parse downloaded info about a invoice_per_client and return it as a cleaned list of dictionaries
         one invoice can have many products, one element is returned for each product
 
@@ -570,17 +587,17 @@ def read_invoice_per_client_siigo(invoice_info: Dict) -> List[Dict[str, Union[st
     List[Dict[str,Union[str,int]]]
 
     """
-    code_2_pirpos_prefix={"1":"LL","3":""}
+    code_2_pirpos_prefix = {"1": "LL", "3": ""}
     try:
-        
-        invoiceInfo = {
-            "DocNumber":invoice_info["DocNumber"],
-            "DocCode": code_2_pirpos_prefix[invoice_info["DocCode"]],
 
+        invoiceInfo = {
+            "DocNumber": code_2_pirpos_prefix[invoice_info["DocCode"]]
+            + str(invoice_info["DocNumber"])
         }
         return invoiceInfo
     except Exception as e:
-        raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
+        raise ErrorLoadingSiigoInvoices(f"error parsing Pirpos product \n{e}")
+
 
 def clean_document(documentoCliente: str) -> int:
     """
@@ -662,3 +679,28 @@ def get_missing_products(
     )
     missing_products = pirpos_products[merged_products["Code"].isna()]
     return missing_products
+
+
+def get_missing_invoices(
+    pirpos_invoices: pd.DataFrame, siigo_invoices: pd.DataFrame
+) -> pd.DataFrame:
+    """get missing invoices in siigo
+
+    Parameters
+    ----------
+    pirpos_invoices: pd.DataFrame
+        registered products on pirpos
+    siigo_invoices: pd.DataFrame
+        registered products on siigo
+
+    Returns
+    -------
+    pd.DataFrame
+        pandas Dataframe with missing invoices
+    """
+
+    merged_invoices = pirpos_invoices.merge(
+        siigo_invoices, left_on="number", right_on="DocNumber", how="left"
+    )
+    missing_invoices = pirpos_invoices[merged_invoices["DocNumber"].isna()]
+    return missing_invoices
