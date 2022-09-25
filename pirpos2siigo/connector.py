@@ -511,7 +511,7 @@ class Connector:
 
             for invoice_info in data:
                 invoices_per_client.extend(
-                    [read_invoice_per_client_pirpos(invoice_info)]
+                    [read_invoice_per_client_pirpos(invoice_info, self.DEFAULT_CLIENT)]
                 )
 
             if time2 >= end_day:
