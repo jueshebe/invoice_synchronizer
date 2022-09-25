@@ -1,15 +1,23 @@
+from typing import Tuple, List, Dict, Union, Optional, Any
 import datetime
 import requests
 import json
 import pandas as pd
 import unidecode
-import math
 import time
 import re
-from typing import Optional, Tuple, List, Dict, Union
-from . import (
-    utils,
+import os
+from pirpos2siigo.utils.utils import (
     Utils,
+    clean_document,
+    read_pirpos_product,
+    read_invoice_per_client_pirpos,
+    read_invoice_per_client_siigo,
+    get_missing_clients,
+    get_missing_products,
+    get_missing_invoices,
+)
+from pirpos2siigo.utils.errors import (
     ErrorSiigoToken,
     ErrorPirposToken,
     ErrorLoadingPirposClients,
@@ -19,10 +27,7 @@ from . import (
     ErrorLoadingPirposInvoices,
     ErrorLoadingSiigoInvoices,
     ErrorCreatingCustomer,
-    constants,
 )
-
-import os
 
 
 class Connector:
@@ -46,7 +51,12 @@ class Connector:
         self.__pirpos_access_token = self.__get_pirpos_access_token()
 
         # Pirpos to Siigo mapings
-        self._load_pirpos2siigo_config(configuration_path)
+        (
+            self.PAYMETHOD_PIRPOS2SIIGO,
+            self.TAXES_PIRPOS2SIIGO,
+            self.INVOICE_TYPE_PIRPOS2SIIGO,
+            self.DEFAULT_CLIENT,
+        ) = self._load_pirpos2siigo_config(configuration_path)
 
     # token para acceso
     def __get_siigo_access_token(self) -> str:
@@ -72,11 +82,20 @@ class Connector:
         headers = {"Content-Type": "application/json"}
         response = requests.post(url, data=json.dumps(values), headers=headers)
 
-        if response.ok == False:
+        if not response.ok:
             raise ErrorSiigoToken(
                 "Error solicitando token, revisar userName y access_key"
             )
-        access_token = response.json()["access_token"]
+        data = response.json()
+
+        if "access_token" in data.keys():
+            access_token = data["access_token"]
+            assert isinstance(access_token, str)
+        else:
+            raise ErrorSiigoToken(
+                "access_token key is not present in the respose"
+            )
+
         return access_token
 
     def __get_pirpos_access_token(self) -> str:
@@ -103,17 +122,25 @@ class Connector:
         headers = {"Content-Type": "application/json"}
         response = requests.post(url, data=json.dumps(values), headers=headers)
 
-        if response.ok == False:
+        if not response.ok:
             raise ErrorPirposToken(
                 "Error getting Pirpos token, check email and password"
             )
-        access_token = response.json()["tokenCurrent"]
+
+        data = response.json()
+        if "tokenCurrent" in data.keys():
+            access_token = data["tokenCurrent"]
+            assert isinstance(access_token, str)
+        else:
+            raise ErrorPirposToken(
+                "tokenCurrent key is not present in the respose"
+            )
         return access_token
 
     # info para mapear siigo2pirpos
     def _load_pirpos2siigo_config(
         self, file_path: str
-    ) -> Tuple[Dict[str, int], Dict[str, Dict["str", int]], Dict[str, int]]:
+    ) -> List[Union[Dict[str, int], Dict[str, Union[int, str]]]]:
         """read JSON configuration file.
         It contains information of how map Pirpos to Siigo
 
@@ -129,13 +156,20 @@ class Connector:
             (pay_method_maping,taxes_maping, invout_tipe_maping)
 
         """
+
         with open(file_path) as file:
             data = json.load(file)
 
-        constants.PAYMETHOD_PIRPOS2SIIGO = data["pay_method_pirpos2siigo"]
-        constants.TAXES_PIRPOS2SIIGO = data["taxes_pirpos2siigo"]
-        constants.INVOICE_TYPE_PIRPOS2SIIGO = data["invoice_type_pirpos2siigo"]
-        constants.DEFAULT_CLIENT = data["default_client"]
+        PAYMETHOD_PIRPOS2SIIGO = data["pay_method_pirpos2siigo"]
+        TAXES_PIRPOS2SIIGO = data["taxes_pirpos2siigo"]
+        INVOICE_TYPE_PIRPOS2SIIGO = data["invoice_type_pirpos2siigo"]
+        DEFAULT_CLIENT = data["default_client"]
+        return [
+            PAYMETHOD_PIRPOS2SIIGO,
+            TAXES_PIRPOS2SIIGO,
+            INVOICE_TYPE_PIRPOS2SIIGO,
+            DEFAULT_CLIENT,
+        ]
 
     # cargar clientes
     def _load_pirpos_clients(self, batch_clients: int = 200) -> pd.DataFrame:
@@ -158,9 +192,11 @@ class Connector:
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
         while True:
-            url = f"https://api.pirpos.com/clients?pagination=true&limit={batch_clients}&page={page}&clientData=&"
+            url = f"""https://api.pirpos.com/
+            clients?pagination=true&
+            limit={batch_clients}&page={page}&clientData=&"""
             response = requests.request("GET", url, headers=headers)
-            if response.ok == False:
+            if not response.ok:
                 raise ErrorLoadingPirposClients(
                     f"Can't download PirPos clients\n {response.text}"
                 )
@@ -169,17 +205,19 @@ class Connector:
                 break
             clients.extend(data)
             page += 1
-        clients = pd.json_normalize(clients)
+        clients_db = pd.json_normalize(clients)
         default_client = {
-            "name": constants.DEFAULT_CLIENT["name"],
-            "document": constants.DEFAULT_CLIENT["document"],
+            "name": self.DEFAULT_CLIENT["name"],
+            "document": self.DEFAULT_CLIENT["document"],
         }
-        clients.loc[len(clients.index)] = default_client
-        clients = clients.fillna("")
-        clients = clients.astype(str)
-        clients["document"] = clients["document"].apply(utils.clean_document)
 
-        return clients
+        # adding default client
+        clients_db.loc[len(clients_db.index)] = default_client
+        clients_db = clients_db.fillna("")
+        clients_db = clients_db.astype(str)
+        clients_db["document"] = clients_db["document"].apply(clean_document)
+
+        return clients_db
 
     def _load_siigo_clients(self, batch_clients: int = 200) -> pd.DataFrame:
         """load Siigo clients
@@ -194,7 +232,7 @@ class Connector:
         pd.Dataframe
           Dataframe with Siigo clients
         """
-        url = f"https://services.siigo.com/ACReportApi/api/v1/Report/post"
+        url = "https://services.siigo.com/ACReportApi/api/v1/Report/post"
         headers = {
             "authority": "services.siigo.com",
             "accept": "application/json, text/plain, */*",
@@ -220,8 +258,10 @@ class Connector:
                         "GridOrderCriteria": None,
                     }
                 )
-                response = requests.request("POST", url, headers=headers, data=payload)
-                if response.ok == False:
+                response = requests.request(
+                    "POST", url, headers=headers, data=payload
+                )
+                if not response.ok:
                     raise ErrorLoadingSiigoClients(
                         f"Can't download Siigo clients\n {response.text}"
                     )
@@ -230,14 +270,14 @@ class Connector:
                     break
                 clients.extend(data)
                 page += 1
-        clients = pd.json_normalize(clients)
-        clients = clients.fillna("")
-        clients = clients.astype(str)
-        clients["Identification"] = clients["Identification"].apply(
-            utils.clean_document
+        clients_db = pd.json_normalize(clients)
+        clients_db = clients_db.fillna("")
+        clients_db = clients_db.astype(str)
+        clients_db["Identification"] = clients_db["Identification"].apply(
+            clean_document
         )
 
-        return clients
+        return clients_db
 
     # cargar productos
     def _load_pirpos_products(self, batch_products: int = 200) -> pd.DataFrame:
@@ -261,25 +301,27 @@ class Connector:
             "Referer": "https://app.pirpos.com/",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
-        payload = {}
+
         while True:
             url = f"https://api.pirpos.com/products?pagination=true&limit={batch_products}&page={page}&name=&categoryId=undefined&useInRappi=undefined&"
-            response = requests.request("GET", url, headers=headers, data=payload)
-            if response.ok == False:
-                raise ErrorLoadingPirposProducts("Can't download Pirpos Products")
-            data: List[Dict] = response.json()["data"]
+            response = requests.request("GET", url, headers=headers)
+            if not response.ok:
+                raise ErrorLoadingPirposProducts(
+                    "Can't download Pirpos Products"
+                )
+            data = response.json()["data"]
             if len(data) == 0:
                 break
             for product_info in data:
-                products.extend(utils.read_pirpos_product(product_info))
+                products.extend(read_pirpos_product(product_info))
 
             page += 1
 
-        products = pd.json_normalize(products)
-        products = products.fillna("")
-        products = products.astype(str)
-        products["name"] = products["name"].apply(Utils.normalize)
-        return products
+        products_db = pd.json_normalize(products)
+        products_db = products_db.fillna("")
+        products_db = products_db.astype(str)
+        products_db["name"] = products_db["name"].apply(Utils.normalize)
+        return products_db
 
     def _load_siigo_products(self, batch_products: int = 200) -> pd.DataFrame:
         """get created products on Siigo
@@ -321,20 +363,24 @@ class Connector:
                     "GridOrderCriteria": None,
                 }
             )
-            response = requests.request("POST", url, headers=headers, data=payload)
-            if response.ok == False:
-                raise ErrorLoadingSiigoProducts("Can't download Siigo Products")
-            data: List[Dict] = response.json()["data"]["Value"]["Table"]
+            response = requests.request(
+                "POST", url, headers=headers, data=payload
+            )
+            if not response.ok:
+                raise ErrorLoadingSiigoProducts(
+                    "Can't download Siigo Products"
+                )
+            data = response.json()["data"]["Value"]["Table"]
             if len(data) == 0:
                 break
             products.extend(data)
             page += 1
 
-        products = pd.json_normalize(products)
-        return products
+        products_db = pd.json_normalize(products)
+        return products_db
 
     def _load_pirpos_invoices_per_product(
-        self, init_day: str, end_day: str, step_days: int = 10
+        self, start_day: str, finish_day: str, step_days: int = 10
     ) -> pd.DataFrame:
         """get invoices per product on pirpos
 
@@ -353,12 +399,14 @@ class Connector:
             Pirpos invoices per product in a range of time
         """
 
-        init_day = datetime.datetime.strptime(init_day, "%Y-%m-%d")
-        end_day = datetime.datetime.strptime(end_day, "%Y-%m-%d") + datetime.timedelta(
-            days=1
-        )
+        init_day = datetime.datetime.strptime(start_day, "%Y-%m-%d")
+        end_day = datetime.datetime.strptime(
+            finish_day, "%Y-%m-%d"
+        ) + datetime.timedelta(days=1)
         if init_day > end_day:
-            raise ErrorLoadingPirposInvoices("end_day must be greater than init_day")
+            raise ErrorLoadingPirposInvoices(
+                "end_day must be greater than init_day"
+            )
 
         days = 0
         invoices_per_products = []
@@ -367,35 +415,41 @@ class Connector:
             "Referer": "https://app.pirpos.com/",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
-        payload = {}
 
         while True:
             time1 = init_day + datetime.timedelta(days=days)
             time2 = (
                 init_day + datetime.timedelta(days=days + step_days)
-                if init_day + datetime.timedelta(days=days + step_days) <= end_day
+                if init_day + datetime.timedelta(days=days + step_days)
+                <= end_day
                 else end_day
             )
             days += step_days
-            date1_str = datetime.datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
-            date2_str = datetime.datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
+            date1_str = datetime.datetime.strftime(
+                time1, "%Y-%m-%dT05:00:00.000Z"
+            )
+            date2_str = datetime.datetime.strftime(
+                time2, "%Y-%m-%dT05:00:00.000Z"
+            )
             url = f"https://api.pirpos.com/reports/reportSalesByProduct?dateInitISO={date1_str}&dateEndISO={date2_str}&showProductCombo=true"
-            response = requests.request("GET", url, headers=headers, data=payload)
-            if response.ok == False:
+            response = requests.request(
+                "GET", url, headers=headers
+            )
+            if not response.ok:
                 raise ErrorLoadingPirposInvoices(
                     "Can't download invoices per product from pirpos"
                 )
-            data: List[Dict] = response.json()["reportByProduct"]
+            data = response.json()["reportByProduct"]
             invoices_per_products.extend(data)
             if time2 >= end_day:
                 break
 
-        invoices_per_products = pd.json_normalize(invoices_per_products)
-        return invoices_per_products
+        invoices_per_products_db = pd.json_normalize(invoices_per_products)
+        return invoices_per_products_db
 
     def _load_pirpos_invoices_per_client(
-        self, init_day: str, end_day: str, step_days: int = 10
-    ) -> Tuple[bool, pd.DataFrame]:
+        self, start_day: str, finish_day: str, step_days: int = 10
+    ) -> Tuple[bool, Optional[pd.DataFrame]]:
         """get invoices per client on pirpos
 
         Parameters
@@ -413,62 +467,74 @@ class Connector:
             Pirpos invoices per client in a range of time
         """
 
-        init_day = datetime.datetime.strptime(init_day, "%Y-%m-%d")
-        end_day = datetime.datetime.strptime(end_day, "%Y-%m-%d") + datetime.timedelta(
-            days=1
-        )
+        init_day = datetime.datetime.strptime(start_day, "%Y-%m-%d")
+        end_day = datetime.datetime.strptime(
+            finish_day, "%Y-%m-%d"
+        ) + datetime.timedelta(days=1)
         if init_day > end_day:
-            raise ErrorLoadingPirposInvoices("end_day must be greater than init_day")
+            raise ErrorLoadingPirposInvoices(
+                "end_day must be greater than init_day"
+            )
 
         days = 0
-        invoices_per_client = []
+        invoices_per_client: List[Dict[str, Union[str, int]]] = []
         headers = {
             "Accept": "application/json, text/plain, */*",
             "Referer": "https://app.pirpos.com/",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
-        payload = {}
 
         while True:
             time1 = init_day + datetime.timedelta(days=days)
             time2 = (
                 init_day + datetime.timedelta(days=days + step_days)
-                if init_day + datetime.timedelta(days=days + step_days) <= end_day
+                if init_day + datetime.timedelta(days=days + step_days)
+                <= end_day
                 else end_day
             )
             days += step_days
-            date1_str = datetime.datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
-            date2_str = datetime.datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
+            date1_str = datetime.datetime.strftime(
+                time1, "%Y-%m-%dT05:00:00.000Z"
+            )
+            date2_str = datetime.datetime.strftime(
+                time2, "%Y-%m-%dT05:00:00.000Z"
+            )
             url = f"https://api.pirpos.com/reports/reportSalesInvoices?status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
-            response = requests.request("GET", url, headers=headers, data=payload)
-            if response.ok == False:
+            response = requests.request(
+                "GET", url, headers=headers
+            )
+            if not response.ok:
                 raise ErrorLoadingPirposInvoices(
                     "Can't download invoices per client from pirpos"
                 )
-            data: List[Dict] = response.json()
+            data = response.json()
 
             for invoice_info in data:
                 invoices_per_client.extend(
-                    [utils.read_invoice_per_client_pirpos(invoice_info)]
+                    [read_invoice_per_client_pirpos(invoice_info)]
                 )
 
             if time2 >= end_day:
                 break
 
         if len(invoices_per_client) > 0:
-            invoices_per_client = pd.json_normalize(invoices_per_client)
-            invoices_per_client = invoices_per_client.fillna("")
-            invoices_per_client = invoices_per_client.astype(str)
-            invoices_per_client["client_document"] = invoices_per_client[
+            invoices_per_client_db = pd.json_normalize(invoices_per_client)
+            invoices_per_client_db = invoices_per_client_db.fillna("")
+            invoices_per_client_db = invoices_per_client_db.astype(str)
+            invoices_per_client_db["client_document"] = invoices_per_client_db[
                 "client_document"
-            ].apply(utils.clean_document)
-            return True, invoices_per_client
+            ].apply(clean_document)
+            return True, invoices_per_client_db
         else:
             return False, None
 
     def _load_siigo_invoices(
-        self, init_day: str, end_day: str, step_days: int = 10, batch_invoices=200
-    ) -> Tuple[bool, pd.DataFrame]:
+        self,
+        start_day: str,
+        finish_day: str,
+        step_days: int = 10,
+        batch_invoices: int = 200,
+    ) -> Tuple[bool, Optional[pd.DataFrame]]:
         """get created invoices from siigo
 
         Parameters
@@ -486,12 +552,14 @@ class Connector:
             Siigo created invoices in a range of time
         """
 
-        init_day = datetime.datetime.strptime(init_day, "%Y-%m-%d")
-        end_day = datetime.datetime.strptime(end_day, "%Y-%m-%d") + datetime.timedelta(
-            days=0
-        )
+        init_day = datetime.datetime.strptime(start_day, "%Y-%m-%d")
+        end_day = datetime.datetime.strptime(
+            finish_day, "%Y-%m-%d"
+        ) + datetime.timedelta(days=0)
         if init_day > end_day:
-            raise ErrorLoadingSiigoInvoices("end_day must be greater than init_day")
+            raise ErrorLoadingSiigoInvoices(
+                "end_day must be greater than init_day"
+            )
 
         days = 0
         invoices_per_client = []
@@ -507,12 +575,11 @@ class Connector:
             time1 = init_day + datetime.timedelta(days=days)
             time2 = (
                 init_day + datetime.timedelta(days=days + step_days)
-                if init_day + datetime.timedelta(days=days + step_days) <= end_day
+                if init_day + datetime.timedelta(days=days + step_days)
+                <= end_day
                 else end_day
             )
             days += step_days
-            date1_str = datetime.datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
-            date2_str = datetime.datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
             payload = {
                 "Id": 5349,
                 "Skip": 0,
@@ -527,26 +594,30 @@ class Connector:
                 "GridOrderCriteria": None,
             }
 
-            response = requests.request("POST", url, headers=headers, json=payload)
-            if response.ok == False:
-                raise ErrorLoadingSiigoInvoices("Can't download invoices from Siigo")
-            data: List[Dict] = response.json()["data"]["Value"]["Table"]
+            response = requests.request(
+                "POST", url, headers=headers, json=payload
+            )
+            if not response.ok:
+                raise ErrorLoadingSiigoInvoices(
+                    "Can't download invoices from Siigo"
+                )
+            data = response.json()["data"]["Value"]["Table"]
 
             for invoice_info in data:
                 invoices_per_client.extend(
-                    [utils.read_invoice_per_client_siigo(invoice_info)]
+                    [read_invoice_per_client_siigo(invoice_info)]
                 )
             if time2 >= end_day or len(data) == 0:
                 break
 
         if len(invoices_per_client) > 0:
-            invoices_per_client = pd.json_normalize(invoices_per_client)
-            invoices_per_client = invoices_per_client.fillna("")
-            return True, invoices_per_client
+            invoices_per_client_df = pd.json_normalize(invoices_per_client)
+            invoices_per_client_df = invoices_per_client_df.fillna("")
+            return True, invoices_per_client_df
         else:
             return False, None
 
-    def actualizarClientes(self):
+    def actualizarClientes(self) -> None:
         """
         Actualiza los clientes en siigo mostrando la barra de progreso
         en el archivo ./errores/errores_clientes.json se guardan los errores
@@ -564,7 +635,7 @@ class Connector:
         # get missing clients
         pirpos_clients = self._load_pirpos_clients()
         siigo_clients = self._load_siigo_clients()
-        missing_customers = utils.get_missing_clients(pirpos_clients, siigo_clients)
+        missing_customers = get_missing_clients(pirpos_clients, siigo_clients)
         size = len(missing_customers)
         for idx in range(size):
             Utils.printProgressBar(idx + 1, size)
@@ -582,7 +653,7 @@ class Connector:
 
         with open("clients_errors.json", "w") as json_file:
             json.dump(erroresBackUp, json_file, indent=6)
-        if errors == True:
+        if errors:
             raise ErrorCreatingCustomer(
                 "Error creating clients, check clients_errors.json file"
             )
@@ -590,7 +661,7 @@ class Connector:
             "\n###########################\nClients created\n###########################\n"
         )
 
-    def crearCliente(self, client_info: pd.Series):
+    def crearCliente(self, client_info: pd.Series) -> bool:
         """
         Crea la solicitud para hacer un cliente en Siigo
 
@@ -655,7 +726,9 @@ class Connector:
             if client_info["cityDetail.cityCode"] != ""
             else "11001"
         )
-        number = client_info["phone"] if client_info["phone"] != "" else "3006003345"
+        number = (
+            client_info["phone"] if client_info["phone"] != "" else "3006003345"
+        )
         email = (
             client_info["email"]
             if client_info["email"] != ""
@@ -708,14 +781,14 @@ class Connector:
         url = "https://api.siigo.com/v1/customers"
         response = requests.post(url, data=str(body), headers=headers)
 
-        if response.ok == False:
+        if not response.ok:
             if response.json()["Errors"][0]["Code"] == "already_exists":
                 return False
             else:
                 raise Exception(str(response.json()["Errors"][0]))
         return True
 
-    def updateProducts(self):
+    def updateProducts(self) -> None:
         """
         Update products
         ./errores/errores_clientes.json file save errors
@@ -733,7 +806,7 @@ class Connector:
         # get missing products
         pirpos_products = self._load_pirpos_products()
         siigo_products = self._load_siigo_products()
-        missing_products = utils.get_missing_products(pirpos_products, siigo_products)
+        missing_products = get_missing_products(pirpos_products, siigo_products)
         size = len(missing_products)
         for idx in range(size):
             Utils.printProgressBar(idx + 1, size)
@@ -751,7 +824,7 @@ class Connector:
 
         with open("products_errors.json", "w") as json_file:
             json.dump(erroresBackUp, json_file, indent=6)
-        if errors == True:
+        if not errors:
             raise ErrorCreatingCustomer(
                 "Error creating products, check clients_errors.json file"
             )
@@ -759,7 +832,7 @@ class Connector:
             "\n###########################\nProducts created\n###########################\n"
         )
 
-    def create_product(self, product_info: pd.Series):
+    def create_product(self, product_info: pd.Series) -> bool:
         """
         request the product creation
 
@@ -817,30 +890,31 @@ class Connector:
         url = "https://api.siigo.com/v1/products"
         response = requests.post(url, data=str(body), headers=headers)
 
-        if response.ok == False:
+        if not response.ok:
             if response.json()["Errors"][0]["Code"] == "already_exists":
                 return False
             else:
                 raise Exception(str(response.json()["Errors"][0]))
         return True
 
-
-
     def postInvoice(
         self,
-        invoice_type,
-        invoice_date,
-        invoice_number,
-        client_document,
-        items,
-        payments,
-    ):
+        invoice_type: int,
+        invoice_date: str,
+        invoice_number: int,
+        client_document: int,
+        items: List[Dict[str, Union[str, int]]],
+        payments: List[Dict[str, Union[str, int]]]
+    ) -> bool:
 
         body = {
             "document": {"id": invoice_type},
             "number": invoice_number,
             "date": invoice_date[0:10],
-            "customer": {"identification": str(client_document), "branch_office": 0},
+            "customer": {
+                "identification": str(client_document),
+                "branch_office": 0,
+            },
             "seller": 709,
             "observations": "Observaciones",
             "items": items,
@@ -858,14 +932,17 @@ class Connector:
             response = requests.post(url, data=str(body), headers=headers)
 
             # print(body)
-            if response.ok == False:
+            if not response.ok:
                 if response.json()["Errors"][0]["Code"] == "already_exists":
                     print(response.json()["Errors"][0]["Message"])
                     return False  # no se puede crear porque ya existe
 
-                elif response.json()["Errors"][0]["Code"] == "duplicated_document":
+                elif (
+                    response.json()["Errors"][0]["Code"]
+                    == "duplicated_document"
+                ):
                     # para relizar otra peticion y ayudar al sistema
-                    #self.enviarFacturaPrueba()
+                    # self.enviarFacturaPrueba()
                     print(response.status_code)
                     print("duplicated_document error. try to send it again")
                     time.sleep(2)
@@ -875,7 +952,10 @@ class Connector:
                         print(response.text)
                         info = str(response.json()["Errors"])
                         raise Exception(info)
-                elif response.json()["Errors"][0]["Code"] == "invalid_total_payments":
+                elif (
+                    response.json()["Errors"][0]["Code"]
+                    == "invalid_total_payments"
+                ):
                     # el mensaje indica el valor que debe ser pagado
                     text = response.json()["Errors"][0]["Message"]
                     print(text)
@@ -901,7 +981,7 @@ class Connector:
                     raise Exception(info)
             return True  # se crea exitosamente
 
-    def update_invoices(self, in_date: str, end_date: str):
+    def update_invoices(self, in_date: str, end_date: str) -> None:
         """update invoices in a range of time on siigo
 
         Parameters
@@ -912,11 +992,18 @@ class Connector:
             end date to update invoices
         """
 
-        successful_pirpos,pirpos_invoices_per_client = self._load_pirpos_invoices_per_client(in_date, end_date)
-        successful_siigo, siigo_invoices = self._load_siigo_invoices(in_date, end_date)
+        (
+            successful_pirpos,
+            pirpos_invoices_per_client,
+        ) = self._load_pirpos_invoices_per_client(in_date, end_date)
+        successful_siigo, siigo_invoices = self._load_siigo_invoices(
+            in_date, end_date
+        )
 
         if successful_pirpos and successful_siigo:
-            invoices = utils.get_missing_invoices(
+            assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
+            assert isinstance(siigo_invoices, pd.DataFrame)
+            invoices = get_missing_invoices(
                 pirpos_invoices_per_client, siigo_invoices
             )
             if len(invoices) == 0:
@@ -924,6 +1011,7 @@ class Connector:
                 return
 
         elif successful_pirpos:
+            assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
             invoices = pirpos_invoices_per_client
         else:
             print("there aren't invoices to update")
@@ -931,10 +1019,11 @@ class Connector:
 
         erroresBackUp = {}
         contador_errores = 0
-        size = len(invoices)
         for _, invoice_info in invoices.iterrows():
 
-            invoice_type = constants.INVOICE_TYPE_PIRPOS2SIIGO[invoice_info["prefix"]]
+            invoice_type = self.INVOICE_TYPE_PIRPOS2SIIGO[
+                invoice_info["prefix"]
+            ]
             invoice_number = invoice_info["seq"]
             invoice_date = invoice_info["created"]
             client_document = invoice_info["client_document"]
@@ -942,22 +1031,34 @@ class Connector:
             # obtiene los items de la factura
             items = []
             for product_info in products:
-                product_info["tax_value"] = product_info["tax_value"] if product_info["tax_name"]!=None else 8
-                product_info["tax_name"] = product_info["tax_name"] if product_info["tax_name"]!=None else "I CONSUMO"
+                product_info["tax_value"] = (
+                    product_info["tax_value"]
+                    if product_info["tax_name"]
+                    else 8
+                )
+                product_info["tax_name"] = (
+                    product_info["tax_name"]
+                    if product_info["tax_name"]
+                    else "I CONSUMO"
+                )
                 item_info = {}
                 item_info["code"] = product_info["id"]
-                item_info["description"] = unidecode.unidecode(product_info["name"])
+                item_info["description"] = unidecode.unidecode(
+                    product_info["name"]
+                )
                 item_info["quantity"] = product_info["quantity"]
                 item_info["price"] = round(
                     product_info["price"]
-                    / (
-                        (1 + product_info["tax_value"] / 100)
-                    ),
+                    / ((1 + product_info["tax_value"] / 100)),
                     2,
                 )
 
                 item_info["taxes"] = [
-                    {"id": constants.TAXES_PIRPOS2SIIGO[product_info["tax_name"]]["id"]}
+                    {
+                        "id": self.TAXES_PIRPOS2SIIGO[product_info["tax_name"]][
+                            "id"
+                        ]
+                    }
                 ]
                 items.append(item_info)
 
@@ -965,9 +1066,13 @@ class Connector:
             paiments_info = json.loads(invoice_info["paid"])
             payments = [
                 {
-                    "id": constants.PAYMETHOD_PIRPOS2SIIGO[paiment_info["pay_method"]],
-                    "value": paiment_info["value"],  # revisar para facturas normales
-                    "due_date": invoice_info["created"][0:10]
+                    "id": self.PAYMETHOD_PIRPOS2SIIGO[
+                        paiment_info["pay_method"]
+                    ],
+                    "value": paiment_info[
+                        "value"
+                    ],  # revisar para facturas normales
+                    "due_date": invoice_info["created"][0:10],
                 }
                 for paiment_info in paiments_info
             ]
@@ -981,7 +1086,7 @@ class Connector:
                     items,
                     payments,
                 )
-                if result == True:
+                if result:
                     print(f"factura {invoice_info['number']} creada\n")
                 else:
                     print(f"factura {invoice_info['number']} ya existe\n")

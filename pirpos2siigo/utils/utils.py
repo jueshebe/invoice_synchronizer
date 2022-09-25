@@ -106,9 +106,7 @@ class Utils:
                 file["Producto"] = file["Producto"].apply(Utils.prepare_product_name)
                 file["Fecha"] = file["Fecha"].str.replace("a. m.", "AM")
                 file["Fecha"] = file["Fecha"].str.replace("p. m.", "PM")
-                file["Fecha"] = pd.to_datetime(
-                    file["Fecha"], format="%Y-%m-%d %I:%M:%S %p"
-                )
+                file["Fecha"] = pd.to_datetime(file["Fecha"], format="%Y-%m-%d %I:%M:%S %p")
 
                 return file
 
@@ -128,12 +126,8 @@ class Utils:
                 file["Total"] = file["Total"].str.replace(".", "", regex=True)
                 file["Total"] = pd.to_numeric(file["Total"], downcast="float") / 100
                 file["Documento"] = file["Documento"].apply(Utils.clean_document)
-                file["Fecha de creación"] = file["Fecha de creación"].str.replace(
-                    "a. m.", "AM"
-                )
-                file["Fecha de creación"] = file["Fecha de creación"].str.replace(
-                    "p. m.", "PM"
-                )
+                file["Fecha de creación"] = file["Fecha de creación"].str.replace("a. m.", "AM")
+                file["Fecha de creación"] = file["Fecha de creación"].str.replace("p. m.", "PM")
                 file["Fecha de creación"] = pd.to_datetime(
                     file["Fecha de creación"], format="%d-%m-%Y %I:%M:%S %p"
                 )
@@ -177,9 +171,7 @@ class Utils:
         pd
            objeto Dataframe
         """
-        only_files = [
-            join(directory, f) for f in listdir(directory) if isfile(join(directory, f))
-        ]
+        only_files = [join(directory, f) for f in listdir(directory) if isfile(join(directory, f))]
         files = [file_name for file_name in only_files if file_extension in file_name]
         if files:
             data_frames = [parse_instructions(file) for file in files]
@@ -224,9 +216,7 @@ class Utils:
         # revisar como se llama la columna que contiene las facturas
         nombresColumnas = ["Factura No.", "No. Factura"]
         nombreColumna = (
-            nombresColumnas[0]
-            if nombresColumnas[0] in file.columns
-            else nombresColumnas[1]
+            nombresColumnas[0] if nombresColumnas[0] in file.columns else nombresColumnas[1]
         )
 
         # definir que es una factura POS
@@ -241,9 +231,7 @@ class Utils:
         facturaSiguienteElectronica = numeracionInicial[1]  # ajustar numeracion inicial
 
         facturaAnteriorPos = numeracionInicial[0] - 1  # ajustar numeracion inicial
-        facturaAnteriorElectronica = (
-            numeracionInicial[1] - 1
-        )  # ajustar numeracion inicial
+        facturaAnteriorElectronica = numeracionInicial[1] - 1  # ajustar numeracion inicial
 
         for fila in range(filas):
             facturai = file.loc[fila, nombreColumna]
@@ -255,9 +243,7 @@ class Utils:
                 if numeroFactura != facturaAnteriorPos:
                     facturaAnteriorPos = numeroFactura
                     if numeroFactura < facturaSiguientePos:
-                        numeroFactura = (
-                            facturaSiguientePos  # actualiza numeracion incorrecta POS
-                        )
+                        numeroFactura = facturaSiguientePos  # actualiza numeracion incorrecta POS
                     if numeroFactura > facturaSiguientePos:
                         facturaSiguientePos = numeroFactura
                     facturaSiguientePos += 1  # actualiza factura sigueinte
@@ -302,11 +288,7 @@ class Utils:
 
         """
         if abs(ventasPCliente.sum()["Total"] - ventasPProducto.sum()["Total"]) >= 50:
-            raise (
-                Exception(
-                    "Las ventas por productos no coinciden con las ventas por facturas."
-                )
-            )
+            raise (Exception("Las ventas por productos no coinciden con las ventas por facturas."))
 
         # unir tablas y verificar que los merge no genenren datos vacíos
         merged_clientes = ventasPCliente.merge(
@@ -345,15 +327,15 @@ class Utils:
 
     @staticmethod
     def printProgressBar(
-        iteration,
-        total,
-        prefix="",
-        suffix="",
-        decimals=1,
-        length=40,
-        fill="█",
-        printEnd="",
-    ):
+        iteration: int,
+        total: int,
+        prefix: str = "",
+        suffix: str = "",
+        decimals: int = 1,
+        length: int = 40,
+        fill: str = "█",
+        printEnd: str = "",
+    ) -> None:
         """
         Call in a loop to create terminal progress bar
         @params:
@@ -366,9 +348,7 @@ class Utils:
             fill        - Optional  : bar fill character (Str)
             printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
         """
-        percent = ("{0:." + str(decimals) + "f}").format(
-            100 * (iteration / float(total))
-        )
+        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
         filledLength = int(length * iteration // total)
         bar = fill * filledLength + "-" * (length - filledLength)
         print(f"\r{prefix} |{bar}| {percent}% {suffix}", end=printEnd)
@@ -484,25 +464,25 @@ def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, in
     if sum([True if prefijo in factura else False for prefijo in prefijosPOS]) > 0:
         prefijoIdentificado = "LL"  # el prefijo es POS ---------------------------------parametro que se puede dejar en un yml
     else:
-        prefijoIdentificado = ""  # factura electronica -----------------------------------se puede dejar en un yml
+        prefijoIdentificado = (
+            ""  # factura electronica -----------------------------------se puede dejar en un yml
+        )
 
     # se obtiene el numero de la factura
-    numero = int(
-        "".join([caracter if caracter.isdigit() else "" for caracter in factura])
-    )
+    numero = int("".join([caracter if caracter.isdigit() else "" for caracter in factura]))
 
     return prefijoIdentificado, numero
 
 
 def read_invoice_per_client_pirpos(
     invoice_info: Dict,
-) -> List[Dict[str, Union[str, int]]]:
+) -> Dict[str, Union[str, int]]:
     """Parse downloaded info about a invoice_per_client and return it as a cleaned list of dictionaries
         one invoice can have many products, one element is returned for each product
 
     Returns
     -------
-    List[Dict[str,Union[str,int]]]
+    Dict[str,Union[str,int]]
 
     """
     try:
@@ -522,24 +502,14 @@ def read_invoice_per_client_pirpos(
             "client_check_digit": invoice_info["client"].get("checkDigit"),
             "client_address": invoice_info["client"].get("address"),
             "client_document_type": invoice_info["client"].get("docuentName"),
-            "client_city_name": invoice_info["client"]
-            .get("cityDetail", {})
-            .get("cityName"),
-            "client_city_code": invoice_info["client"]
-            .get("cityDetail", {})
-            .get("cityCode"),
-            "client_state_code": invoice_info["client"]
-            .get("cityDetail", {})
-            .get("stateCode"),
-            "client_country_code": invoice_info["client"]
-            .get("cityDetail", {})
-            .get("countryCode"),
+            "client_city_name": invoice_info["client"].get("cityDetail", {}).get("cityName"),
+            "client_city_code": invoice_info["client"].get("cityDetail", {}).get("cityCode"),
+            "client_state_code": invoice_info["client"].get("cityDetail", {}).get("stateCode"),
+            "client_country_code": invoice_info["client"].get("cityDetail", {}).get("countryCode"),
             "paid": json.dumps(
                 [
                     {"pay_method": subpay["paymentMethod"], "value": subpay["value"]}
-                    for subpay in invoice_info.get("paid", {}).get(
-                        "paymentMethodValue", [{}]
-                    )
+                    for subpay in invoice_info.get("paid", {}).get("paymentMethodValue", [{}])
                 ]
             ),
             "taxes": json.dumps(
@@ -578,7 +548,7 @@ def read_invoice_per_client_pirpos(
 
 def read_invoice_per_client_siigo(
     invoice_info: Dict,
-) -> List[Dict[str, Union[str, int]]]:
+) -> Dict[str, Union[str, int]]:
     """Parse downloaded info about a invoice_per_client and return it as a cleaned list of dictionaries
         one invoice can have many products, one element is returned for each product
 
@@ -631,9 +601,7 @@ def clean_document(documentoCliente: str) -> int:
     return int(str(documentoCliente))
 
 
-def get_missing_clients(
-    pirpos_clients: pd.DataFrame, siigo_clients: pd.DataFrame
-) -> pd.DataFrame:
+def get_missing_clients(pirpos_clients: pd.DataFrame, siigo_clients: pd.DataFrame) -> pd.DataFrame:
     """get missing clients in siigo
 
     Parameters
