@@ -8,7 +8,6 @@ from pirpos2siigo.utils.errors import (
     ErrorLoadingPirposProducts,
     ErrorLoadingSiigoInvoices,
 )
-from pirpos2siigo.utils import constants
 
 
 class Utils:
@@ -476,6 +475,7 @@ def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, in
 
 def read_invoice_per_client_pirpos(
     invoice_info: Dict,
+    DEFAULT_CLIENT: Dict[str, Union[int, str]],
 ) -> Dict[str, Union[str, int]]:
     """Parse downloaded info about a invoice_per_client and return it as a cleaned list of dictionaries
         one invoice can have many products, one element is returned for each product
@@ -497,7 +497,7 @@ def read_invoice_per_client_pirpos(
             "client_email": invoice_info["client"].get("email"),
             "client_phone": invoice_info["client"].get("phone"),
             "client_document": invoice_info["client"].get(
-                "document", constants.DEFAULT_CLIENT["document"]
+                "document", DEFAULT_CLIENT["document"]
             ),
             "client_check_digit": invoice_info["client"].get("checkDigit"),
             "client_address": invoice_info["client"].get("address"),
