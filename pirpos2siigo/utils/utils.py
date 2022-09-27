@@ -714,7 +714,7 @@ def get_missing_invoices(
     return missing_invoices
 
 
-def best_sellers(invoices_per_product: pd.DataFrame) -> pd.DataFrame:
+def pivot_invoices_per_product(invoices_per_product: pd.DataFrame) -> pd.DataFrame:
     """get best sellers 
 
     Parameters
@@ -737,4 +737,4 @@ def best_sellers(invoices_per_product: pd.DataFrame) -> pd.DataFrame:
 
     pivot = pivot.sort_values(by=['Total'], axis=0, ascending=False)
     pivot = pivot.sort_values(by=['Total'], axis=1, ascending=False)
-    return pivot.iloc[0:4,1:5]
+    return pivot

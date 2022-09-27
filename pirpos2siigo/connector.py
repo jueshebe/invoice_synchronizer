@@ -1,5 +1,5 @@
 from typing import Tuple, List, Dict, Union, Optional
-import datetime
+from datetime import datetime, timedelta
 import requests
 import json
 import pandas as pd
@@ -379,15 +379,15 @@ class Connector:
         return products_db
 
     def _load_pirpos_invoices_per_product(
-        self, start_day: str, finish_day: str, step_days: int = 10
+        self, init_day: datetime, end_day: datetime, step_days: int = 10
     ) -> Tuple[bool, Optional[pd.DataFrame]]:
         """get invoices per product on pirpos
 
         Parameters
         ----------
-        init_day : str
+        init_day : datetime
             initial time to download invoices. year-month-day
-        end_day : str
+        end_day : datetime
             end time to download invoices year-month-day
         step_days : int, optional
             days used to download invoices in steps, by default 10
@@ -398,10 +398,7 @@ class Connector:
             Pirpos invoices per product in a range of time
         """
 
-        init_day = datetime.datetime.strptime(start_day, "%Y-%m-%d")
-        end_day = datetime.datetime.strptime(
-            finish_day, "%Y-%m-%d"
-        ) + datetime.timedelta(days=1)
+        end_day += timedelta(days=1)
         if init_day > end_day:
             raise ErrorLoadingPirposInvoices(
                 "end_day must be greater than init_day"
@@ -416,18 +413,18 @@ class Connector:
         }
 
         while True:
-            time1 = init_day + datetime.timedelta(days=days)
+            time1 = init_day + timedelta(days=days)
             time2 = (
-                init_day + datetime.timedelta(days=days + step_days)
-                if init_day + datetime.timedelta(days=days + step_days)
+                init_day + timedelta(days=days + step_days)
+                if init_day + timedelta(days=days + step_days)
                 <= end_day
                 else end_day
             )
             days += step_days
-            date1_str = datetime.datetime.strftime(
+            date1_str = datetime.strftime(
                 time1, "%Y-%m-%dT05:00:00.000Z"
             )
-            date2_str = datetime.datetime.strftime(
+            date2_str = datetime.strftime(
                 time2, "%Y-%m-%dT05:00:00.000Z"
             )
             url = f"https://api.pirpos.com/reports/reportSalesByProduct?dateInitISO={date1_str}&dateEndISO={date2_str}&showProductCombo=true"
@@ -457,7 +454,7 @@ class Connector:
             return False, None
 
     def _load_pirpos_invoices_per_client(
-        self, start_day: str, finish_day: str, step_days: int = 10
+        self, init_day: datetime, end_day: datetime, step_days: int = 10
     ) -> Tuple[bool, Optional[pd.DataFrame]]:
         """get invoices per client on pirpos
 
@@ -476,10 +473,7 @@ class Connector:
             Pirpos invoices per client in a range of time
         """
 
-        init_day = datetime.datetime.strptime(start_day, "%Y-%m-%d")
-        end_day = datetime.datetime.strptime(
-            finish_day, "%Y-%m-%d"
-        ) + datetime.timedelta(days=1)
+        end_day += timedelta(days=1)
         if init_day > end_day:
             raise ErrorLoadingPirposInvoices(
                 "end_day must be greater than init_day"
@@ -494,18 +488,18 @@ class Connector:
         }
 
         while True:
-            time1 = init_day + datetime.timedelta(days=days)
+            time1 = init_day + timedelta(days=days)
             time2 = (
-                init_day + datetime.timedelta(days=days + step_days)
-                if init_day + datetime.timedelta(days=days + step_days)
+                init_day + timedelta(days=days + step_days)
+                if init_day + timedelta(days=days + step_days)
                 <= end_day
                 else end_day
             )
             days += step_days
-            date1_str = datetime.datetime.strftime(
+            date1_str = datetime.strftime(
                 time1, "%Y-%m-%dT05:00:00.000Z"
             )
-            date2_str = datetime.datetime.strftime(
+            date2_str = datetime.strftime(
                 time2, "%Y-%m-%dT05:00:00.000Z"
             )
             url = f"https://api.pirpos.com/reports/reportSalesInvoices?status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
@@ -563,10 +557,10 @@ class Connector:
             Siigo created invoices in a range of time
         """
 
-        init_day = datetime.datetime.strptime(start_day, "%Y-%m-%d")
-        end_day = datetime.datetime.strptime(
+        init_day = datetime.strptime(start_day, "%Y-%m-%d")
+        end_day = datetime.strptime(
             finish_day, "%Y-%m-%d"
-        ) + datetime.timedelta(days=0)
+        ) + timedelta(days=0)
         if init_day > end_day:
             raise ErrorLoadingSiigoInvoices(
                 "end_day must be greater than init_day"
@@ -583,10 +577,10 @@ class Connector:
         }
 
         while True:
-            time1 = init_day + datetime.timedelta(days=days)
+            time1 = init_day + timedelta(days=days)
             time2 = (
-                init_day + datetime.timedelta(days=days + step_days)
-                if init_day + datetime.timedelta(days=days + step_days)
+                init_day + timedelta(days=days + step_days)
+                if init_day + timedelta(days=days + step_days)
                 <= end_day
                 else end_day
             )
