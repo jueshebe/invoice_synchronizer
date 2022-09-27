@@ -1,4 +1,4 @@
-from typing import Tuple, List, Dict, Union, Optional, Any
+from typing import Tuple, List, Dict, Union, Optional
 import datetime
 import requests
 import json
@@ -12,6 +12,7 @@ from pirpos2siigo.utils.utils import (
     clean_document,
     read_pirpos_product,
     read_invoice_per_client_pirpos,
+    read_invoice_per_product_pirpos,
     read_invoice_per_client_siigo,
     get_missing_clients,
     get_missing_products,
@@ -367,9 +368,7 @@ class Connector:
                 "POST", url, headers=headers, data=payload
             )
             if not response.ok:
-                raise ErrorLoadingSiigoProducts(
-                    "Can't download Siigo Products"
-                )
+                raise ErrorLoadingSiigoProducts("Can't download Siigo Products")
             data = response.json()["data"]["Value"]["Table"]
             if len(data) == 0:
                 break
@@ -381,7 +380,7 @@ class Connector:
 
     def _load_pirpos_invoices_per_product(
         self, start_day: str, finish_day: str, step_days: int = 10
-    ) -> pd.DataFrame:
+    ) -> Tuple[bool, Optional[pd.DataFrame]]:
         """get invoices per product on pirpos
 
         Parameters
@@ -432,20 +431,30 @@ class Connector:
                 time2, "%Y-%m-%dT05:00:00.000Z"
             )
             url = f"https://api.pirpos.com/reports/reportSalesByProduct?dateInitISO={date1_str}&dateEndISO={date2_str}&showProductCombo=true"
-            response = requests.request(
-                "GET", url, headers=headers
-            )
+            response = requests.request("GET", url, headers=headers)
             if not response.ok:
                 raise ErrorLoadingPirposInvoices(
                     "Can't download invoices per product from pirpos"
                 )
             data = response.json()["reportByProduct"]
-            invoices_per_products.extend(data)
+            for invoice_info in data:
+                invoices_per_products.extend(
+                    [
+                        read_invoice_per_product_pirpos(
+                            invoice_info, self.DEFAULT_CLIENT
+                        )
+                    ]
+                )
             if time2 >= end_day:
                 break
 
-        invoices_per_products_db = pd.json_normalize(invoices_per_products)
-        return invoices_per_products_db
+        if len(invoices_per_products) > 0:
+            invoices_per_products_db = pd.json_normalize(invoices_per_products)
+            invoices_per_products_db = invoices_per_products_db.fillna("")
+            invoices_per_products_db["product_quantity"] = invoices_per_products_db["product_quantity"].astype(int)
+            return True, invoices_per_products_db
+        else:
+            return False, None
 
     def _load_pirpos_invoices_per_client(
         self, start_day: str, finish_day: str, step_days: int = 10
@@ -500,9 +509,7 @@ class Connector:
                 time2, "%Y-%m-%dT05:00:00.000Z"
             )
             url = f"https://api.pirpos.com/reports/reportSalesInvoices?status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
-            response = requests.request(
-                "GET", url, headers=headers
-            )
+            response = requests.request("GET", url, headers=headers)
             if not response.ok:
                 raise ErrorLoadingPirposInvoices(
                     "Can't download invoices per client from pirpos"
@@ -511,7 +518,11 @@ class Connector:
 
             for invoice_info in data:
                 invoices_per_client.extend(
-                    [read_invoice_per_client_pirpos(invoice_info, self.DEFAULT_CLIENT)]
+                    [
+                        read_invoice_per_client_pirpos(
+                            invoice_info, self.DEFAULT_CLIENT
+                        )
+                    ]
                 )
 
             if time2 >= end_day:
@@ -904,7 +915,7 @@ class Connector:
         invoice_number: int,
         client_document: int,
         items: List[Dict[str, Union[str, int]]],
-        payments: List[Dict[str, Union[str, int]]]
+        payments: List[Dict[str, Union[str, int]]],
     ) -> bool:
 
         body = {
@@ -1032,9 +1043,7 @@ class Connector:
             items = []
             for product_info in products:
                 product_info["tax_value"] = (
-                    product_info["tax_value"]
-                    if product_info["tax_name"]
-                    else 8
+                    product_info["tax_value"] if product_info["tax_name"] else 8
                 )
                 product_info["tax_name"] = (
                     product_info["tax_name"]
@@ -1106,3 +1115,5 @@ class Connector:
         print(
             "\n###########################\nFin Envio Masivo de facturas\n###########################\n"
         )
+
+

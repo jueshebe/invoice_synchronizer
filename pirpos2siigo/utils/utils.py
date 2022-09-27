@@ -441,7 +441,7 @@ def read_pirpos_product(product: Dict) -> List[Dict[str, Union[str, int]]]:
         raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
 
 
-def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, int]:
+def _revisarFactura(factura: str, prefijosPOS: List[str]) -> Tuple[str, int]:
     """
     Obtiene la numeracion y tipo de factura
 
@@ -471,6 +471,45 @@ def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, in
     numero = int("".join([caracter if caracter.isdigit() else "" for caracter in factura]))
 
     return prefijoIdentificado, numero
+
+
+def read_invoice_per_product_pirpos(
+    invoice_info: Dict, 
+    DEFAULT_CLIENT: Dict[str, Union[int, str]],
+) -> Dict[str, Union[str, int]]:
+    """Parse downloaded info about a invoice_per_product and return it as a cleaned dictionary
+
+    Returns
+    -------
+    Dict[str,Union[str,int]]
+
+    """
+    try:
+
+        prefix, number = _revisarFactura(invoice_info["_id"]["number"], ["LL"])
+        invoiceInfo = {
+            "number": prefix + str(number),
+            "prefix": prefix,
+            "seq": number,
+            "created": invoice_info["_id"].get("createdOn"),
+            "client_name": invoice_info["_id"]["client"]["name"],
+            "client_last_name": invoice_info["_id"]["client"].get("lastName",""),
+            "client_email": invoice_info["_id"]["client"].get("email"),
+            "client_phone": invoice_info["_id"]["client"].get("phone"),
+            "client_document": invoice_info["_id"]["client"].get(
+                "document", DEFAULT_CLIENT["document"]
+            ),
+            "product_name": invoice_info["_id"]["name"],
+            "product_id": invoice_info["_id"]["_id"],
+            "product_quantity": invoice_info["_id"]["quantity"],
+            "product_price": invoice_info["_id"]["priceNormal"],
+            "seller": invoice_info["_id"]["seller"],
+            "table": invoice_info["_id"]["table"],
+        }
+        return invoiceInfo
+    except Exception as e:
+        print(e)
+        raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
 
 
 def read_invoice_per_client_pirpos(
@@ -540,6 +579,7 @@ def read_invoice_per_client_pirpos(
             "total_base_tax": invoice_info["totalBaseTax"],
             "total_taxes": invoice_info["totalTaxes"],
             "total_paid": invoice_info["totalPaid"],
+            "seller": invoice_info["seller"].get("name", "")
         }
         return invoiceInfo
     except Exception as e:
@@ -672,3 +712,29 @@ def get_missing_invoices(
     )
     missing_invoices = merged_invoices[merged_invoices["DocNumber"].isnull()]
     return missing_invoices
+
+
+def best_sellers(invoices_per_product: pd.DataFrame) -> pd.DataFrame:
+    """get best sellers 
+
+    Parameters
+    ----------
+    invoices_per_product : pd.Dataframe
+
+    Returns
+    -------
+    pd.DataFrame
+    """
+    pivot = invoices_per_product.pivot_table(
+        index='seller',
+        columns='product_name',
+        values='product_quantity',
+        aggfunc="sum",
+        margins=True,
+        margins_name='Total',
+        fill_value=0
+    )
+
+    pivot = pivot.sort_values(by=['Total'], axis=0, ascending=False)
+    pivot = pivot.sort_values(by=['Total'], axis=1, ascending=False)
+    return pivot.iloc[0:4,1:5]
