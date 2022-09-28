@@ -448,7 +448,6 @@ class Connector:
         if len(invoices_per_products) > 0:
             invoices_per_products_db = pd.json_normalize(invoices_per_products)
             invoices_per_products_db = invoices_per_products_db.fillna("")
-            invoices_per_products_db["product_quantity"] = invoices_per_products_db["product_quantity"].astype(int)
             return True, invoices_per_products_db
         else:
             return False, None

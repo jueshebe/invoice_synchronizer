@@ -484,6 +484,8 @@ def read_invoice_per_product_pirpos(
     Dict[str,Union[str,int]]
 
     """
+    if not isinstance(invoice_info["_id"].get("quantity"), int):
+        print(invoice_info)
     try:
 
         prefix, number = _revisarFactura(invoice_info["_id"]["number"], ["LL"])
@@ -501,15 +503,38 @@ def read_invoice_per_product_pirpos(
             ),
             "product_name": invoice_info["_id"]["name"],
             "product_id": invoice_info["_id"]["_id"],
-            "product_quantity": invoice_info["_id"]["quantity"],
+            "product_quantity": check_int_number(
+                invoice_info["_id"].get("quantity", 0)
+            ),
             "product_price": invoice_info["_id"]["priceNormal"],
             "seller": invoice_info["_id"]["seller"],
             "table": invoice_info["_id"]["table"],
         }
         return invoiceInfo
     except Exception as e:
+        print(invoice_info["_id"]["quantity"])
         print(e)
         raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
+
+
+def check_int_number(number: Union[int, str, None]) -> int:
+    """force data to be int
+
+    Parameters
+    ----------
+    number : Union[int, str, None]
+
+    Returns
+    -------
+    int
+    """
+
+    if isinstance(number, int):
+        return number
+    elif isinstance(number, str):
+        if number.isnumeric():
+            return int(number)
+    return 0
 
 
 def read_invoice_per_client_pirpos(
