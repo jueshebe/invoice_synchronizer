@@ -7,6 +7,7 @@ from typing import Callable, List, Tuple, Dict, Union, Optional
 from pirpos2siigo.utils.errors import (
     ErrorLoadingPirposProducts,
     ErrorLoadingSiigoInvoices,
+    ErrorNoneInvoice,
 )
 
 
@@ -441,7 +442,7 @@ def read_pirpos_product(product: Dict) -> List[Dict[str, Union[str, int]]]:
         raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
 
 
-def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, int]:
+def _revisarFactura(factura: str, prefijosPOS: List[str]) -> Tuple[str, int]:
     """
     Obtiene la numeracion y tipo de factura
 
@@ -473,6 +474,68 @@ def _revisarFactura(factura: str, prefijosPOS: Tuple[str, str]) -> Tuple[str, in
     return prefijoIdentificado, numero
 
 
+def read_invoice_per_product_pirpos(
+    invoice_info: Dict, 
+    DEFAULT_CLIENT: Dict[str, Union[int, str]],
+) -> Dict[str, Union[str, int]]:
+    """Parse downloaded info about a invoice_per_product and return it as a cleaned dictionary
+
+    Returns
+    -------
+    Dict[str,Union[str,int]]
+
+    """
+    try:
+
+        prefix, number = _revisarFactura(invoice_info["_id"]["number"], ["LL"])
+        invoiceInfo = {
+            "number": prefix + str(number),
+            "prefix": prefix,
+            "seq": number,
+            "created": invoice_info["_id"].get("createdOn"),
+            "client_name": invoice_info["_id"]["client"]["name"],
+            "client_last_name": invoice_info["_id"]["client"].get("lastName",""),
+            "client_email": invoice_info["_id"]["client"].get("email"),
+            "client_phone": invoice_info["_id"]["client"].get("phone"),
+            "client_document": invoice_info["_id"]["client"].get(
+                "document", DEFAULT_CLIENT["document"]
+            ),
+            "product_name": invoice_info["_id"]["name"],
+            "product_id": invoice_info["_id"]["_id"],
+            "product_quantity": check_int_number(
+                invoice_info["_id"].get("quantity", 0)
+            ),
+            "product_price": invoice_info["_id"]["priceNormal"],
+            "seller": invoice_info["_id"]["seller"],
+            "table": invoice_info["_id"]["table"],
+        }
+        return invoiceInfo
+    except Exception as e:
+        print(invoice_info["_id"]["quantity"])
+        print(e)
+        raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
+
+
+def check_int_number(number: Union[int, str, None]) -> int:
+    """force data to be int
+
+    Parameters
+    ----------
+    number : Union[int, str, None]
+
+    Returns
+    -------
+    int
+    """
+
+    if isinstance(number, int):
+        return number
+    elif isinstance(number, str):
+        if number.isnumeric():
+            return int(number)
+    return 0
+
+
 def read_invoice_per_client_pirpos(
     invoice_info: Dict,
     DEFAULT_CLIENT: Dict[str, Union[int, str]],
@@ -486,6 +549,33 @@ def read_invoice_per_client_pirpos(
 
     """
     try:
+        if "products" not in invoice_info:
+            raise ErrorNoneInvoice("no contiene productos")
+        products = []
+        for subprod in invoice_info["products"]:
+            if not isinstance(subprod.get("price"), int):
+                continue
+            product_info = {
+                "id": subprod.get("idInternal"),
+                "name": subprod.get("name"),
+                "price": subprod.get("price"),
+                "quantity": subprod.get("quantity"),
+                "tax_name": subprod.get("taxName"),
+                "tax_value": subprod.get("tax"),
+                "discount": subprod.get("discount"),
+            }
+            products.append(product_info)
+        if len(products) == 0:
+            raise ErrorNoneInvoice("no hay productos validos, precio none")
+        paid = []
+        payments_method = invoice_info.get("paid", {}).get("paymentMethodValue", [{}])
+        for subpay in payments_method:
+            if not isinstance(subpay["value"], int):
+                raise ErrorNoneInvoice("un pago invalido")
+            paid_info = {"pay_method": subpay["paymentMethod"], "value": subpay["value"]}
+            paid.append(paid_info)
+        if len(paid) == 0:
+            raise ErrorNoneInvoice("no hay pagos")
 
         prefix, _ = _revisarFactura(invoice_info["number"], ["LL"])
         invoiceInfo = {
@@ -506,12 +596,7 @@ def read_invoice_per_client_pirpos(
             "client_city_code": invoice_info["client"].get("cityDetail", {}).get("cityCode"),
             "client_state_code": invoice_info["client"].get("cityDetail", {}).get("stateCode"),
             "client_country_code": invoice_info["client"].get("cityDetail", {}).get("countryCode"),
-            "paid": json.dumps(
-                [
-                    {"pay_method": subpay["paymentMethod"], "value": subpay["value"]}
-                    for subpay in invoice_info.get("paid", {}).get("paymentMethodValue", [{}])
-                ]
-            ),
+            "paid": json.dumps(paid),
             "taxes": json.dumps(
                 [
                     {"name": subtax["name"], "value": subtax["value"]}
@@ -520,28 +605,18 @@ def read_invoice_per_client_pirpos(
                     for subtax in invoice_info.get("taxes", [{}])
                 ]
             ),
-            "products": json.dumps(
-                [
-                    {
-                        "id": subprod.get("idInternal"),
-                        "name": subprod.get("name"),
-                        "price": subprod.get("price"),
-                        "quantity": subprod.get("quantity"),
-                        "tax_name": subprod.get("taxName"),
-                        "tax_value": subprod.get("tax"),
-                        "discount": subprod.get("discount"),
-                    }
-                    for subprod in invoice_info.get("products", [])
-                ]
-            ),
+            "products": json.dumps(products),
             "total_bruto": invoice_info["totalBruto"],
             "total_discount": invoice_info["totalDiscount"],
             "sub_total": invoice_info["subTotal"],
             "total_base_tax": invoice_info["totalBaseTax"],
             "total_taxes": invoice_info["totalTaxes"],
             "total_paid": invoice_info["totalPaid"],
+            "seller": invoice_info["seller"].get("name", "")
         }
         return invoiceInfo
+    except ErrorNoneInvoice as e:
+        raise e
     except Exception as e:
         raise ErrorLoadingPirposProducts(f"error parsing Pirpos product \n{e}")
 
@@ -621,6 +696,7 @@ def get_missing_clients(pirpos_clients: pd.DataFrame, siigo_clients: pd.DataFram
         siigo_clients, left_on="document", right_on="Identification", how="left"
     )
     missing_clients = pirpos_clients[merged_clientes["Identification"].isna()]
+    test = merged_clientes[merged_clientes["Identification"].isna()]
     return missing_clients
 
 
@@ -672,3 +748,29 @@ def get_missing_invoices(
     )
     missing_invoices = merged_invoices[merged_invoices["DocNumber"].isnull()]
     return missing_invoices
+
+
+def pivot_invoices_per_product(invoices_per_product: pd.DataFrame) -> pd.DataFrame:
+    """get best sellers 
+
+    Parameters
+    ----------
+    invoices_per_product : pd.Dataframe
+
+    Returns
+    -------
+    pd.DataFrame
+    """
+    pivot = invoices_per_product.pivot_table(
+        index='product_name',
+        columns='seller',
+        values='product_quantity',
+        aggfunc="sum",
+        margins=True,
+        margins_name='Total',
+        fill_value=0
+    )
+
+    pivot = pivot.sort_values(by=['Total'], axis=0, ascending=False)
+    pivot = pivot.sort_values(by=['Total'], axis=1, ascending=False)
+    return pivot
