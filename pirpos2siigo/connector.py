@@ -28,6 +28,9 @@ from pirpos2siigo.utils.errors import (
     ErrorLoadingPirposInvoices,
     ErrorLoadingSiigoInvoices,
     ErrorCreatingCustomer,
+    ErrorCreatingProduct,
+    ErrorSendingInvoices,
+    ErrorNoneInvoice
 )
 
 
@@ -193,9 +196,7 @@ class Connector:
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
         while True:
-            url = f"""https://api.pirpos.com/
-            clients?pagination=true&
-            limit={batch_clients}&page={page}&clientData=&"""
+            url = f"https://api.pirpos.com/clients?pagination=true&limit={batch_clients}&page={page}&clientData=&"
             response = requests.request("GET", url, headers=headers)
             if not response.ok:
                 raise ErrorLoadingPirposClients(
@@ -240,6 +241,7 @@ class Connector:
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
         }
+        
 
         clients = []
         for type_client in ["Clientes", "Proveedores"]:
@@ -277,7 +279,7 @@ class Connector:
         clients_db["Identification"] = clients_db["Identification"].apply(
             clean_document
         )
-
+        clients_db = clients_db.drop_duplicates()
         return clients_db
 
     # cargar productos
@@ -510,14 +512,17 @@ class Connector:
             data = response.json()
 
             for invoice_info in data:
-                invoices_per_client.extend(
-                    [
-                        read_invoice_per_client_pirpos(
-                            invoice_info, self.DEFAULT_CLIENT
-                        )
-                    ]
-                )
-
+                try:
+                    invoices_per_client.extend(
+                        [
+                            read_invoice_per_client_pirpos(
+                                invoice_info, self.DEFAULT_CLIENT
+                            )
+                        ]
+                    )
+                except ErrorNoneInvoice:
+                    print(f"Factura None {invoice_info['number']}"),
+                    continue
             if time2 >= end_day:
                 break
 
@@ -534,8 +539,8 @@ class Connector:
 
     def _load_siigo_invoices(
         self,
-        start_day: str,
-        finish_day: str,
+        init_day: datetime,
+        end_day: datetime,
         step_days: int = 10,
         batch_invoices: int = 200,
     ) -> Tuple[bool, Optional[pd.DataFrame]]:
@@ -556,10 +561,7 @@ class Connector:
             Siigo created invoices in a range of time
         """
 
-        init_day = datetime.strptime(start_day, "%Y-%m-%d")
-        end_day = datetime.strptime(
-            finish_day, "%Y-%m-%d"
-        ) + timedelta(days=0)
+        end_day += timedelta(days=0)
         if init_day > end_day:
             raise ErrorLoadingSiigoInvoices(
                 "end_day must be greater than init_day"
@@ -567,7 +569,7 @@ class Connector:
 
         days = 0
         invoices_per_client = []
-        url = f"https://services.siigo.com/ACReportApi/api/v1/Report/post"
+        url = "https://services.siigo.com/ACReportApi/api/v1/Report/post"
         headers = {
             "authority": "services.siigo.com",
             "accept": "application/json, text/plain, */*",
@@ -628,9 +630,6 @@ class Connector:
 
         """
 
-        print(
-            "\n###########################\nCreating missing clients\n###########################\n"
-        )
         # errores Para imprimirlos en txt
         erroresBackUp = {}
         errors = False
@@ -642,7 +641,7 @@ class Connector:
         missing_customers = get_missing_clients(pirpos_clients, siigo_clients)
         size = len(missing_customers)
         for idx in range(size):
-            Utils.printProgressBar(idx + 1, size)
+            # Utils.printProgressBar(idx + 1, size)
             client_info = missing_customers.iloc[idx, :]
             try:
                 self.crearCliente(client_info)
@@ -661,9 +660,6 @@ class Connector:
             raise ErrorCreatingCustomer(
                 "Error creating clients, check clients_errors.json file"
             )
-        print(
-            "\n###########################\nClients created\n###########################\n"
-        )
 
     def crearCliente(self, client_info: pd.Series) -> bool:
         """
@@ -799,9 +795,6 @@ class Connector:
 
         """
 
-        print(
-            "\n###########################\nCreating missing Products\n###########################\n"
-        )
         # errores Para imprimirlos en txt
         erroresBackUp = {}
         errors = False
@@ -813,7 +806,7 @@ class Connector:
         missing_products = get_missing_products(pirpos_products, siigo_products)
         size = len(missing_products)
         for idx in range(size):
-            Utils.printProgressBar(idx + 1, size)
+            # Utils.printProgressBar(idx + 1, size)
             product_info = missing_products.iloc[idx, :]
             try:
                 self.create_product(product_info)
@@ -828,13 +821,10 @@ class Connector:
 
         with open("products_errors.json", "w") as json_file:
             json.dump(erroresBackUp, json_file, indent=6)
-        if not errors:
-            raise ErrorCreatingCustomer(
+        if errors:
+            raise ErrorCreatingProduct(
                 "Error creating products, check clients_errors.json file"
             )
-        print(
-            "\n###########################\nProducts created\n###########################\n"
-        )
 
     def create_product(self, product_info: pd.Series) -> bool:
         """
@@ -950,7 +940,7 @@ class Connector:
                     print(response.status_code)
                     print("duplicated_document error. try to send it again")
                     time.sleep(2)
-                    if i < 29:
+                    if i < 0:
                         continue
                     else:
                         print(response.text)
@@ -985,14 +975,15 @@ class Connector:
                     raise Exception(info)
             return True  # se crea exitosamente
 
-    def update_invoices(self, in_date: str, end_date: str) -> None:
+    def _update_invoices(self, in_date: datetime, end_date: datetime) -> int:
+
         """update invoices in a range of time on siigo
 
         Parameters
         ----------
-        in_date:str
+        in_date:datetime
             initial date to update invoices
-        end_date:str
+        end_date:datetime
             end date to update invoices
         """
 
@@ -1012,19 +1003,17 @@ class Connector:
             )
             if len(invoices) == 0:
                 print("there aren't invoices to update")
-                return
+                return 0
 
         elif successful_pirpos:
             assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
             invoices = pirpos_invoices_per_client
         else:
             print("there aren't invoices to update")
-            return
-
+            return 0
         erroresBackUp = {}
         contador_errores = 0
         for _, invoice_info in invoices.iterrows():
-
             invoice_type = self.INVOICE_TYPE_PIRPOS2SIIGO[
                 invoice_info["prefix"]
             ]
@@ -1102,11 +1091,24 @@ class Connector:
                     "numero factura": invoice_info["number"],
                     "error": str(e),
                 }
-
+            finally:
+                time.sleep(1)
+        print("guardando json")
         with open("errores_facturas.json", "w") as json_file:
             json.dump(erroresBackUp, json_file, indent=6)
-        print(
-            "\n###########################\nFin Envio Masivo de facturas\n###########################\n"
-        )
+        return contador_errores
 
-
+    def update_invoices(self, init_day: datetime, end_day: datetime) -> None:
+        """send invoices to siigo
+        """
+        #day1 = datetime.strptime(init_day, "%Y-%m-%d")
+        #day2 = datetime.strptime(end_day, "%Y-%m-%d")
+        for i in range(20):
+            print((f"intento {i}"))
+            errors = self._update_invoices(init_day, end_day)
+            print(f"errores {errors}")
+            if errors == 0:
+                break
+            print("intentando volver a enviar facturas con error")
+        if errors > 0:
+            raise ErrorSendingInvoices("Error actualizando facturas revisar archivos")

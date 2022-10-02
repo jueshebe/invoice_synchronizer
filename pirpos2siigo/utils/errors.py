@@ -27,6 +27,10 @@ class ErrorLoadingPirposInvoices(Exception):
     pass
 
 
+class ErrorNoneInvoice(Exception):
+    pass
+
+
 class ErrorLoadingSiigoInvoices(Exception):
     pass
 
@@ -36,4 +40,10 @@ class ErrorParsingPirposInvoices(Exception):
 
 
 class ErrorCreatingCustomer(Exception):
+    pass
+
+class ErrorCreatingProduct(Exception):
+    pass
+
+class ErrorSendingInvoices(Exception):
     pass
