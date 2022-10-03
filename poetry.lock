@@ -121,11 +121,11 @@ python-versions = "*"
 
 [[package]]
 name = "numpy"
-version = "1.23.3"
+version = "1.21.0"
 description = "NumPy is the fundamental package for array computing with Python."
 category = "main"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.7"
 
 [[package]]
 name = "openpyxl"
@@ -313,7 +313,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "17a418e618d8f125413aa5e25d8ea1f1cc48f087fc3bcda77c1e91b126a7b8e5"
+content-hash = "ff4a40889ac7c598a923cd62c643a4460abd2b52032471e4eb0351ed47f82199"
 
 [metadata.files]
 atomicwrites = []
