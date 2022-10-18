@@ -47,3 +47,4 @@ class ErrorCreatingProduct(Exception):
 
 class ErrorSendingInvoices(Exception):
     pass
+

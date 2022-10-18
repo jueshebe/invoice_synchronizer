@@ -1,6 +1,8 @@
 from datetime import datetime
 import pandas as pd
+from pirpos2siigo.utils.utils import sold_units_per_months
 from pirpos2siigo import Connector, pivot_invoices_per_product
+
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
@@ -17,7 +19,7 @@ end_day = datetime.strptime(
 connector = Connector(configuration_path="configuration.JSON")
 #connector.actualizarClientes()# revisar siigo proveedores como clientes 
 
-connector.update_invoices(init_day, end_day)
+#connector.update_invoices(init_day, end_day)
 
 # _, invoices = connector._load_pirpos_invoices_per_client(init_day, end_day, 5)
 # _, invoices2 = connector._load_pirpos_invoices_per_product(init_day, end_day, 5)
@@ -26,6 +28,9 @@ connector.update_invoices(init_day, end_day)
 # best sellers per product
 
 # best = pivot_invoices_per_product(invoices2)
+quantity, total = connector.get_history_sold_units(["2022-04", "2022-05", "2022-06"])
+quantity.to_excel("quantity.xlsx")
+total.to_excel("total.xlsx")
 #q = 1+1
 pass
 

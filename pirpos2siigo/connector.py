@@ -1,9 +1,11 @@
 from typing import Tuple, List, Dict, Union, Optional
 from datetime import datetime, timedelta
 import requests
+import numpy as np
 import json
 import pandas as pd
 import unidecode
+import calendar
 import time
 import re
 import os
@@ -30,7 +32,7 @@ from pirpos2siigo.utils.errors import (
     ErrorCreatingCustomer,
     ErrorCreatingProduct,
     ErrorSendingInvoices,
-    ErrorNoneInvoice
+    ErrorNoneInvoice,
 )
 
 
@@ -241,7 +243,6 @@ class Connector:
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
         }
-        
 
         clients = []
         for type_client in ["Clientes", "Proveedores"]:
@@ -381,7 +382,10 @@ class Connector:
         return products_db
 
     def _load_pirpos_invoices_per_product(
-        self, init_day: datetime, end_day: datetime, step_days: int = 10
+        self,
+        init_day: datetime,
+        end_day: datetime,
+        step_days: Optional[int] = 10,
     ) -> Tuple[bool, Optional[pd.DataFrame]]:
         """get invoices per product on pirpos
 
@@ -418,17 +422,12 @@ class Connector:
             time1 = init_day + timedelta(days=days)
             time2 = (
                 init_day + timedelta(days=days + step_days)
-                if init_day + timedelta(days=days + step_days)
-                <= end_day
+                if init_day + timedelta(days=days + step_days) <= end_day
                 else end_day
             )
             days += step_days
-            date1_str = datetime.strftime(
-                time1, "%Y-%m-%dT05:00:00.000Z"
-            )
-            date2_str = datetime.strftime(
-                time2, "%Y-%m-%dT05:00:00.000Z"
-            )
+            date1_str = datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
+            date2_str = datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
             url = f"https://api.pirpos.com/reports/reportSalesByProduct?dateInitISO={date1_str}&dateEndISO={date2_str}&showProductCombo=true"
             response = requests.request("GET", url, headers=headers)
             if not response.ok:
@@ -492,17 +491,12 @@ class Connector:
             time1 = init_day + timedelta(days=days)
             time2 = (
                 init_day + timedelta(days=days + step_days)
-                if init_day + timedelta(days=days + step_days)
-                <= end_day
+                if init_day + timedelta(days=days + step_days) <= end_day
                 else end_day
             )
             days += step_days
-            date1_str = datetime.strftime(
-                time1, "%Y-%m-%dT05:00:00.000Z"
-            )
-            date2_str = datetime.strftime(
-                time2, "%Y-%m-%dT05:00:00.000Z"
-            )
+            date1_str = datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
+            date2_str = datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
             url = f"https://api.pirpos.com/reports/reportSalesInvoices?status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
             response = requests.request("GET", url, headers=headers)
             if not response.ok:
@@ -581,8 +575,7 @@ class Connector:
             time1 = init_day + timedelta(days=days)
             time2 = (
                 init_day + timedelta(days=days + step_days)
-                if init_day + timedelta(days=days + step_days)
-                <= end_day
+                if init_day + timedelta(days=days + step_days) <= end_day
                 else end_day
             )
             days += step_days
@@ -1099,10 +1092,9 @@ class Connector:
         return contador_errores
 
     def update_invoices(self, init_day: datetime, end_day: datetime) -> None:
-        """send invoices to siigo
-        """
-        #day1 = datetime.strptime(init_day, "%Y-%m-%d")
-        #day2 = datetime.strptime(end_day, "%Y-%m-%d")
+        """send invoices to siigo"""
+        # day1 = datetime.strptime(init_day, "%Y-%m-%d")
+        # day2 = datetime.strptime(end_day, "%Y-%m-%d")
         for i in range(20):
             print((f"intento {i}"))
             errors = self._update_invoices(init_day, end_day)
@@ -1111,4 +1103,84 @@ class Connector:
                 break
             print("intentando volver a enviar facturas con error")
         if errors > 0:
-            raise ErrorSendingInvoices("Error actualizando facturas revisar archivos")
+            raise ErrorSendingInvoices(
+                "Error actualizando facturas revisar archivos"
+            )
+
+    def _get_sold_units(
+        self, init_day: datetime, end_day: datetime
+    ) -> pd.DataFrame:
+        "get quantity and total for each product in a range of time"
+
+        end_day += timedelta(days=1)
+
+        if init_day > end_day:
+            raise ErrorLoadingPirposInvoices(
+                "end_day must be greater than init_day"
+            )
+
+        date1_str = datetime.strftime(init_day, "%Y-%m-%dT05:00:00.000Z")
+        date2_str = datetime.strftime(end_day, "%Y-%m-%dT05:00:00.000Z")
+        url = f"https://api.pirpos.com/stats/totalInvoicesByProducts?dateInitISO={date1_str}&dateEndISO={date2_str}&sortBy=total&"
+
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://app.pirpos.com/",
+            "Authorization": f"Bearer {self.__pirpos_access_token}",
+        }
+        products_quantity_total = []
+
+        response = requests.request("GET", url, headers=headers)
+        if not response.ok:
+            raise ErrorLoadingSiigoProducts(
+                "Can't download Siigo sold units per Products"
+            )
+        data = response.json()
+        if len(data) > 0:
+            for product in data:
+                quantity = float(product["quantity"])
+                total = float(product["total"])
+                name = product["_id"]["product"]["name"]
+                products_quantity_total.append([name, quantity, total])
+            np_pqt = np.array(products_quantity_total)
+            data_frame = pd.DataFrame(
+                np_pqt[:, 1:], index=np_pqt[:, 0], columns=["quantity", "total"]
+            )
+            data_frame[["quantity", "total"]] = data_frame[["quantity", "total"]].apply(pd.to_numeric)
+        else:
+            data_frame = pd.DataFrame([], columns=["quantity", "total"])
+        return data_frame
+
+    def get_history_sold_units(self, years_months: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """get quantity and total sold for each product in a list of periods [year-month]
+
+        Parameters
+        ----------
+        years_months : List[str]
+
+        Returns
+        -------
+        Tuple[pd.DataFrame, pd.DataFrame]
+            quantity per product, total sold per product
+        """
+        history_df_quantity = pd.DataFrame([])
+        history_df_total = pd.DataFrame([])
+        for year_month in years_months:
+            date1 = datetime.strptime(year_month, "%Y-%m")
+            date2 = datetime(
+                date1.year,
+                date1.month,
+                calendar.monthrange(date1.year, date1.month)[1],
+            )
+            info_df = self._get_sold_units(date1, date2)
+            history_df_quantity[date1.strftime("%Y-%m")] = info_df["quantity"]
+            history_df_total[date1.strftime("%Y-%m")] = info_df["total"]
+        history_df_quantity['Total'] = history_df_quantity.sum(axis=1)
+        history_df_total['Total'] = history_df_total.sum(axis=1)
+
+        history_df_quantity = history_df_quantity.sort_values(by=["Total"], axis=0, ascending=False)
+        history_df_total = history_df_total.sort_values(by=["Total"], axis=0, ascending=False)
+
+        history_df_quantity = history_df_quantity.applymap(lambda x: round(x, 2))
+        history_df_total = history_df_total.applymap(lambda x: round(x, 2))
+        return history_df_quantity, history_df_total

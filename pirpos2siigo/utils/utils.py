@@ -1,14 +1,18 @@
 import json
 import pandas as pd
 import math
+import calendar
 from os import listdir
 from os.path import isfile, join
 from typing import Callable, List, Tuple, Dict, Union, Optional
 from pirpos2siigo.utils.errors import (
     ErrorLoadingPirposProducts,
+    ErrorLoadingPirposInvoices,
     ErrorLoadingSiigoInvoices,
     ErrorNoneInvoice,
 )
+from datetime import datetime
+from datetime import date
 
 
 class Utils:
@@ -66,7 +70,9 @@ class Utils:
             def func(file_name):
                 file = pd.read_excel(file_name)
                 encabezados = file.iloc[5, :]
-                file = file.drop(labels=[0, 1, 2, 3, 4, 5, len(file) - 1], axis=0)
+                file = file.drop(
+                    labels=[0, 1, 2, 3, 4, 5, len(file) - 1], axis=0
+                )
                 file = file.reset_index(drop=True)
                 file.columns = encabezados
                 file = file.dropna(subset=["Identificación"], axis=0)
@@ -81,11 +87,15 @@ class Utils:
             def func(file_name):
                 file = pd.read_excel(file_name)
                 encabezados = file.iloc[5, :]
-                file = file.drop(labels=[0, 1, 2, 3, 4, 5, len(file) - 1], axis=0)
+                file = file.drop(
+                    labels=[0, 1, 2, 3, 4, 5, len(file) - 1], axis=0
+                )
                 file = file.reset_index(drop=True)
                 file.columns = encabezados
                 file = file.dropna(subset=["Código"], axis=0)
-                file["Nombre"] = file["Nombre"].apply(Utils.prepare_product_name)
+                file["Nombre"] = file["Nombre"].apply(
+                    Utils.prepare_product_name
+                )
                 return file
 
             extension = ".xlsx"
@@ -101,12 +111,20 @@ class Utils:
                 file = file.reset_index(drop=True)
                 file["Total"] = file["Total"].str.replace(",", "", regex=True)
                 file["Total"] = file["Total"].str.replace(".", "", regex=True)
-                file["Total"] = pd.to_numeric(file["Total"], downcast="float") / 100
-                file["Cantidad"] = pd.to_numeric(file["Cantidad"], downcast="float")
-                file["Producto"] = file["Producto"].apply(Utils.prepare_product_name)
+                file["Total"] = (
+                    pd.to_numeric(file["Total"], downcast="float") / 100
+                )
+                file["Cantidad"] = pd.to_numeric(
+                    file["Cantidad"], downcast="float"
+                )
+                file["Producto"] = file["Producto"].apply(
+                    Utils.prepare_product_name
+                )
                 file["Fecha"] = file["Fecha"].str.replace("a. m.", "AM")
                 file["Fecha"] = file["Fecha"].str.replace("p. m.", "PM")
-                file["Fecha"] = pd.to_datetime(file["Fecha"], format="%Y-%m-%d %I:%M:%S %p")
+                file["Fecha"] = pd.to_datetime(
+                    file["Fecha"], format="%Y-%m-%d %I:%M:%S %p"
+                )
 
                 return file
 
@@ -124,10 +142,18 @@ class Utils:
                 # self._ventasPCliente = self._ventasPCliente.dropna(how="all")
                 file["Total"] = file["Total"].str.replace(",", "", regex=True)
                 file["Total"] = file["Total"].str.replace(".", "", regex=True)
-                file["Total"] = pd.to_numeric(file["Total"], downcast="float") / 100
-                file["Documento"] = file["Documento"].apply(Utils.clean_document)
-                file["Fecha de creación"] = file["Fecha de creación"].str.replace("a. m.", "AM")
-                file["Fecha de creación"] = file["Fecha de creación"].str.replace("p. m.", "PM")
+                file["Total"] = (
+                    pd.to_numeric(file["Total"], downcast="float") / 100
+                )
+                file["Documento"] = file["Documento"].apply(
+                    Utils.clean_document
+                )
+                file["Fecha de creación"] = file[
+                    "Fecha de creación"
+                ].str.replace("a. m.", "AM")
+                file["Fecha de creación"] = file[
+                    "Fecha de creación"
+                ].str.replace("p. m.", "PM")
                 file["Fecha de creación"] = pd.to_datetime(
                     file["Fecha de creación"], format="%d-%m-%Y %I:%M:%S %p"
                 )
@@ -171,8 +197,14 @@ class Utils:
         pd
            objeto Dataframe
         """
-        only_files = [join(directory, f) for f in listdir(directory) if isfile(join(directory, f))]
-        files = [file_name for file_name in only_files if file_extension in file_name]
+        only_files = [
+            join(directory, f)
+            for f in listdir(directory)
+            if isfile(join(directory, f))
+        ]
+        files = [
+            file_name for file_name in only_files if file_extension in file_name
+        ]
         if files:
             data_frames = [parse_instructions(file) for file in files]
             data_frame = pd.concat(data_frames)
@@ -187,7 +219,9 @@ class Utils:
                 )
                 data_frame = data_frame.sort_index()
                 data_frame = data_frame.reset_index(drop=True)
-                data_frame = Utils._cambiarNumeracion(data_frame, numeracionInicial)
+                data_frame = Utils._cambiarNumeracion(
+                    data_frame, numeracionInicial
+                )
 
             return data_frame
         return None
@@ -216,7 +250,9 @@ class Utils:
         # revisar como se llama la columna que contiene las facturas
         nombresColumnas = ["Factura No.", "No. Factura"]
         nombreColumna = (
-            nombresColumnas[0] if nombresColumnas[0] in file.columns else nombresColumnas[1]
+            nombresColumnas[0]
+            if nombresColumnas[0] in file.columns
+            else nombresColumnas[1]
         )
 
         # definir que es una factura POS
@@ -228,10 +264,16 @@ class Utils:
         # recorrer cada factura, identificar el tipo de factura y modificar consecutivo si es necesario
         filas = file.shape[0]  # filas por recorrer
         facturaSiguientePos = numeracionInicial[0]  # ajustar numeracion inicial
-        facturaSiguienteElectronica = numeracionInicial[1]  # ajustar numeracion inicial
+        facturaSiguienteElectronica = numeracionInicial[
+            1
+        ]  # ajustar numeracion inicial
 
-        facturaAnteriorPos = numeracionInicial[0] - 1  # ajustar numeracion inicial
-        facturaAnteriorElectronica = numeracionInicial[1] - 1  # ajustar numeracion inicial
+        facturaAnteriorPos = (
+            numeracionInicial[0] - 1
+        )  # ajustar numeracion inicial
+        facturaAnteriorElectronica = (
+            numeracionInicial[1] - 1
+        )  # ajustar numeracion inicial
 
         for fila in range(filas):
             facturai = file.loc[fila, nombreColumna]
@@ -257,7 +299,9 @@ class Utils:
                         numeroFactura = facturaSiguienteElectronica  # actualiza numeracion incorrecta Electronica
                     if numeroFactura > facturaSiguienteElectronica:
                         facturaSiguienteElectronica = numeroFactura
-                    facturaSiguienteElectronica += 1  # actualiza factura sigueinte
+                    facturaSiguienteElectronica += (
+                        1  # actualiza factura sigueinte
+                    )
                 file.loc[fila, nombreColumna] = "{0}{1}".format(
                     prefijo, facturaSiguienteElectronica - 1
                 )  # actualiza prefijo y numero de factura
@@ -266,7 +310,10 @@ class Utils:
 
     @staticmethod
     def revisarDocumentos(
-        productos: pd, clientesSiigo: pd, ventasPProducto: pd, ventasPCliente: pd
+        productos: pd,
+        clientesSiigo: pd,
+        ventasPProducto: pd,
+        ventasPCliente: pd,
     ):
         """
         Revisa que los archvios tengan la informacion adecuada
@@ -287,12 +334,22 @@ class Utils:
         None.
 
         """
-        if abs(ventasPCliente.sum()["Total"] - ventasPProducto.sum()["Total"]) >= 50:
-            raise (Exception("Las ventas por productos no coinciden con las ventas por facturas."))
+        if (
+            abs(ventasPCliente.sum()["Total"] - ventasPProducto.sum()["Total"])
+            >= 50
+        ):
+            raise (
+                Exception(
+                    "Las ventas por productos no coinciden con las ventas por facturas."
+                )
+            )
 
         # unir tablas y verificar que los merge no genenren datos vacíos
         merged_clientes = ventasPCliente.merge(
-            clientesSiigo, left_on="Documento", right_on="Identificación", how="left"
+            clientesSiigo,
+            left_on="Documento",
+            right_on="Identificación",
+            how="left",
         )
         missing_customers = merged_clientes.loc[
             merged_clientes["Identificación"].isna(), ["Cliente", "Documento"]
@@ -317,7 +374,9 @@ class Utils:
                 message = message + f"  {name}, documento: {document}\n"
             message = message + "El programa debe crearlos \n"
         if missing_products.shape[0] > 0:
-            message = message + "\nError, siigo no posee los siguientes productos:\n"
+            message = (
+                message + "\nError, siigo no posee los siguientes productos:\n"
+            )
             for product in missing_products:
                 message = message + f"  {product}\n"
             message = message + "Se deben crear manualmente \n"
@@ -348,7 +407,9 @@ class Utils:
             fill        - Optional  : bar fill character (Str)
             printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
         """
-        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+        percent = ("{0:." + str(decimals) + "f}").format(
+            100 * (iteration / float(total))
+        )
         filledLength = int(length * iteration // total)
         bar = fill * filledLength + "-" * (length - filledLength)
         print(f"\r{prefix} |{bar}| {percent}% {suffix}", end=printEnd)
@@ -432,7 +493,9 @@ def read_pirpos_product(product: Dict) -> List[Dict[str, Union[str, int]]]:
                     "tax_name": product["locationsStock"][0]["tax"]["name"]
                     if product["locationsStock"][0]["tax"] != None
                     else None,
-                    "tax_value": product["locationsStock"][0]["tax"]["percentage"]
+                    "tax_value": product["locationsStock"][0]["tax"][
+                        "percentage"
+                    ]
                     if product["locationsStock"][0]["tax"] != None
                     else None,
                 }
@@ -461,21 +524,26 @@ def _revisarFactura(factura: str, prefijosPOS: List[str]) -> Tuple[str, int]:
 
     # identificar tipo de factura
     prefijoIdentificado = None
-    if sum([True if prefijo in factura else False for prefijo in prefijosPOS]) > 0:
+    if (
+        sum([True if prefijo in factura else False for prefijo in prefijosPOS])
+        > 0
+    ):
         prefijoIdentificado = "LL"  # el prefijo es POS ---------------------------------parametro que se puede dejar en un yml
     else:
-        prefijoIdentificado = (
-            ""  # factura electronica -----------------------------------se puede dejar en un yml
-        )
+        prefijoIdentificado = ""  # factura electronica -----------------------------------se puede dejar en un yml
 
     # se obtiene el numero de la factura
-    numero = int("".join([caracter if caracter.isdigit() else "" for caracter in factura]))
+    numero = int(
+        "".join(
+            [caracter if caracter.isdigit() else "" for caracter in factura]
+        )
+    )
 
     return prefijoIdentificado, numero
 
 
 def read_invoice_per_product_pirpos(
-    invoice_info: Dict, 
+    invoice_info: Dict,
     DEFAULT_CLIENT: Dict[str, Union[int, str]],
 ) -> Dict[str, Union[str, int]]:
     """Parse downloaded info about a invoice_per_product and return it as a cleaned dictionary
@@ -494,7 +562,9 @@ def read_invoice_per_product_pirpos(
             "seq": number,
             "created": invoice_info["_id"].get("createdOn"),
             "client_name": invoice_info["_id"]["client"]["name"],
-            "client_last_name": invoice_info["_id"]["client"].get("lastName",""),
+            "client_last_name": invoice_info["_id"]["client"].get(
+                "lastName", ""
+            ),
             "client_email": invoice_info["_id"]["client"].get("email"),
             "client_phone": invoice_info["_id"]["client"].get("phone"),
             "client_document": invoice_info["_id"]["client"].get(
@@ -568,11 +638,16 @@ def read_invoice_per_client_pirpos(
         if len(products) == 0:
             raise ErrorNoneInvoice("no hay productos validos, precio none")
         paid = []
-        payments_method = invoice_info.get("paid", {}).get("paymentMethodValue", [{}])
+        payments_method = invoice_info.get("paid", {}).get(
+            "paymentMethodValue", [{}]
+        )
         for subpay in payments_method:
             if not isinstance(subpay["value"], int):
                 raise ErrorNoneInvoice("un pago invalido")
-            paid_info = {"pay_method": subpay["paymentMethod"], "value": subpay["value"]}
+            paid_info = {
+                "pay_method": subpay["paymentMethod"],
+                "value": subpay["value"],
+            }
             paid.append(paid_info)
         if len(paid) == 0:
             raise ErrorNoneInvoice("no hay pagos")
@@ -592,10 +667,18 @@ def read_invoice_per_client_pirpos(
             "client_check_digit": invoice_info["client"].get("checkDigit"),
             "client_address": invoice_info["client"].get("address"),
             "client_document_type": invoice_info["client"].get("docuentName"),
-            "client_city_name": invoice_info["client"].get("cityDetail", {}).get("cityName"),
-            "client_city_code": invoice_info["client"].get("cityDetail", {}).get("cityCode"),
-            "client_state_code": invoice_info["client"].get("cityDetail", {}).get("stateCode"),
-            "client_country_code": invoice_info["client"].get("cityDetail", {}).get("countryCode"),
+            "client_city_name": invoice_info["client"]
+            .get("cityDetail", {})
+            .get("cityName"),
+            "client_city_code": invoice_info["client"]
+            .get("cityDetail", {})
+            .get("cityCode"),
+            "client_state_code": invoice_info["client"]
+            .get("cityDetail", {})
+            .get("stateCode"),
+            "client_country_code": invoice_info["client"]
+            .get("cityDetail", {})
+            .get("countryCode"),
             "paid": json.dumps(paid),
             "taxes": json.dumps(
                 [
@@ -612,7 +695,7 @@ def read_invoice_per_client_pirpos(
             "total_base_tax": invoice_info["totalBaseTax"],
             "total_taxes": invoice_info["totalTaxes"],
             "total_paid": invoice_info["totalPaid"],
-            "seller": invoice_info["seller"].get("name", "")
+            "seller": invoice_info["seller"].get("name", ""),
         }
         return invoiceInfo
     except ErrorNoneInvoice as e:
@@ -676,7 +759,9 @@ def clean_document(documentoCliente: str) -> int:
     return int(str(documentoCliente))
 
 
-def get_missing_clients(pirpos_clients: pd.DataFrame, siigo_clients: pd.DataFrame) -> pd.DataFrame:
+def get_missing_clients(
+    pirpos_clients: pd.DataFrame, siigo_clients: pd.DataFrame
+) -> pd.DataFrame:
     """get missing clients in siigo
 
     Parameters
@@ -750,8 +835,10 @@ def get_missing_invoices(
     return missing_invoices
 
 
-def pivot_invoices_per_product(invoices_per_product: pd.DataFrame) -> pd.DataFrame:
-    """get best sellers 
+def pivot_invoices_per_product(
+    invoices_per_product: pd.DataFrame,
+) -> pd.DataFrame:
+    """get best sellers
 
     Parameters
     ----------
@@ -762,15 +849,15 @@ def pivot_invoices_per_product(invoices_per_product: pd.DataFrame) -> pd.DataFra
     pd.DataFrame
     """
     pivot = invoices_per_product.pivot_table(
-        index='product_name',
-        columns='seller',
-        values='product_quantity',
+        index="product_name",
+        columns="seller",
+        values="product_quantity",
         aggfunc="sum",
         margins=True,
-        margins_name='Total',
-        fill_value=0
+        margins_name="Total",
+        fill_value=0,
     )
 
-    pivot = pivot.sort_values(by=['Total'], axis=0, ascending=False)
-    pivot = pivot.sort_values(by=['Total'], axis=1, ascending=False)
+    pivot = pivot.sort_values(by=["Total"], axis=0, ascending=False)
+    pivot = pivot.sort_values(by=["Total"], axis=1, ascending=False)
     return pivot
