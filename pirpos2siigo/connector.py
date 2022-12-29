@@ -991,7 +991,7 @@ class Connector:
         if successful_pirpos and successful_siigo:
             assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
             assert isinstance(siigo_invoices, pd.DataFrame)
-            invoices = get_missing_invoices(
+            invoices, _ = get_missing_invoices(
                 pirpos_invoices_per_client, siigo_invoices
             )
             if len(invoices) == 0:
@@ -1087,6 +1087,8 @@ class Connector:
             finally:
                 time.sleep(1)
         print("guardando json")
+        a = "1234"
+        # TODO revisar save cuando se hacen thears y la ruta
         with open("errores_facturas.json", "w") as json_file:
             json.dump(erroresBackUp, json_file, indent=6)
         return contador_errores
@@ -1184,3 +1186,28 @@ class Connector:
         history_df_quantity = history_df_quantity.applymap(lambda x: round(x, 2))
         history_df_total = history_df_total.applymap(lambda x: round(x, 2))
         return history_df_quantity, history_df_total
+
+    def check_invoices_integrity(self, in_date: datetime, end_date: datetime) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Check integrity of invoices exported to siigo.
+        """
+        (
+            successful_pirpos,
+            pirpos_invoices_per_client,
+        ) = self._load_pirpos_invoices_per_client(in_date, end_date)
+        successful_siigo, siigo_invoices = self._load_siigo_invoices(
+            in_date, end_date
+        )
+
+        if successful_pirpos and successful_siigo:
+            assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
+            assert isinstance(siigo_invoices, pd.DataFrame)
+            missing_invoices, left_merge = get_missing_invoices(
+                pirpos_invoices_per_client, siigo_invoices
+            )
+
+        elif successful_pirpos:
+            assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
+            missing_invoices = pirpos_invoices_per_client
+        else:
+            print("There aren't invoices to compare")
+            return 0

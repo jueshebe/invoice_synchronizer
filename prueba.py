@@ -1,6 +1,7 @@
+"""Tests for pirpos2siigo connector."""
 from datetime import datetime
 import pandas as pd
-from pirpos2siigo.utils.utils import sold_units_per_months
+# from pirpos2siigo.utils.utils import sold_units_per_months
 from pirpos2siigo import Connector, pivot_invoices_per_product
 
 pd.set_option('display.max_columns', None)
@@ -28,10 +29,12 @@ connector = Connector(configuration_path="configuration.JSON")
 # best sellers per product
 
 # best = pivot_invoices_per_product(invoices2)
-quantity, total = connector.get_history_sold_units(["2022-04", "2022-05", "2022-06"])
-quantity.to_excel("quantity.xlsx")
-total.to_excel("total.xlsx")
+# quantity, total = connector.get_history_sold_units(["2022-04", "2022-05", "2022-06"])
+# quantity.to_excel("quantity.xlsx")
+# total.to_excel("total.xlsx")
 #q = 1+1
+
+
 pass
 
 # hacer que haga intentos y retome los errores del json

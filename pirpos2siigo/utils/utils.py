@@ -812,8 +812,8 @@ def get_missing_products(
 
 def get_missing_invoices(
     pirpos_invoices: pd.DataFrame, siigo_invoices: pd.DataFrame
-) -> pd.DataFrame:
-    """get missing invoices in siigo
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Get missing invoices in siigo.
 
     Parameters
     ----------
@@ -824,15 +824,14 @@ def get_missing_invoices(
 
     Returns
     -------
-    pd.DataFrame
-        pandas Dataframe with missing invoices
+    Tuple[pd.DataFrame, pd.DataFrame]
+        missing invoices and left merge with pirpos invoices
     """
-
     merged_invoices = pirpos_invoices.merge(
         siigo_invoices, left_on="number", right_on="DocNumber", how="left"
     )
     missing_invoices = merged_invoices[merged_invoices["DocNumber"].isnull()]
-    return missing_invoices
+    return missing_invoices, merged_invoices
 
 
 def pivot_invoices_per_product(
