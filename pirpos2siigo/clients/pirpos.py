@@ -73,8 +73,8 @@ class PirposConnector:
 
         Returns
         -------
-        pd.Dataframe
-          Dataframe with pirpos clients
+        List[Client]
+          list of Client object.
         """
         page = 0
         clients: List[Client] = []
@@ -117,6 +117,49 @@ class PirposConnector:
 
         return clients
 
+    def _load_pirpos_products(self, batch_products: int = 200):
+        """get created products on pirpos
+
+        Parameters
+        ----------
+        batch_products : int, optional
+            batch used to download products, by default 200
+
+        Returns
+        -------
+        pd.DataFrame
+            Pirpos products
+        """
+
+        page = 0
+        products = []
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://app.pirpos.com/",
+            "Authorization": f"Bearer {self.__pirpos_access_token}",
+        }
+
+        while True:
+            url = f"https://api.pirpos.com/products?pagination=true&limit={batch_products}&page={page}&name=&categoryId=undefined&useInRappi=undefined&"
+            response = requests.request("GET", url, headers=headers)
+            if not response.ok:
+                raise ErrorLoadingPirposProducts(
+                    "Can't download Pirpos Products"
+                )
+            data = response.json()["data"]
+            if len(data) == 0:
+                break
+            for product_info in data:
+                products.extend(read_pirpos_product(product_info))
+
+            page += 1
+
+        products_db = pd.json_normalize(products)
+        products_db = products_db.fillna("")
+        products_db = products_db.astype(str)
+        products_db["name"] = products_db["name"].apply(Utils.normalize)
+        return products_db
+
 
 if __name__ == "__main__":
     user_name = os.getenv("PIRPOS_USER_NAME")
@@ -125,4 +168,5 @@ if __name__ == "__main__":
     assert isinstance(user_name, str)
     assert isinstance(user_password, str)
     connector = PirposConnector(user_name, user_password, PATH)
-    loaded_clients = connector.load_pirpos_clients()
+    # loaded_clients = connector.load_pirpos_clients()
+    loaded_products = connector._load_pirpos_products()

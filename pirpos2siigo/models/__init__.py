@@ -6,5 +6,6 @@ from pirpos2siigo.models.clients import (
     Client,
     DocumentType,
     Responsibilities,
-    CityDetail
+    CityDetail,
 )
+from pirpos2siigo.models.products import Product, TaxInfo

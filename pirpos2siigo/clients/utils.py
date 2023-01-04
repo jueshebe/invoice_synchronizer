@@ -1,12 +1,16 @@
 """Utils used by clients."""
-from typing import Optional
+from typing import Optional, Dict, Any, List
 import json
-from pirpos2siigo.models import Pirpos2SiigoMap, Client, CityDetail
+from pirpos2siigo.models import (
+    Pirpos2SiigoMap,
+    Client,
+    CityDetail,
+    Product,
+    TaxInfo,
+)
 
 
-def load_pirpos2siigo_config(
-    file_path: str
-) -> Pirpos2SiigoMap:
+def load_pirpos2siigo_config(file_path: str) -> Pirpos2SiigoMap:
     """Read JSON configuration file.
 
     It contains information of how map Pirpos to Siigo
@@ -27,7 +31,8 @@ def load_pirpos2siigo_config(
             return config_obj
     except Exception as error:
         raise ErrorConfigPirposSiigo(
-            f"""error loading file {file_path}. Error msg: {error}""") from error
+            f"""error loading file {file_path}. Error msg: {error}"""
+        ) from error
 
 
 def create_client(
@@ -43,7 +48,7 @@ def create_client(
     city_name: Optional[str] = None,
     city_state: Optional[str] = None,
     city_code: Optional[str] = None,
-    country_code: Optional[str] = None
+    country_code: Optional[str] = None,
 ) -> Client:
     """Create client object."""
     default_client = configuration_file.default_client
@@ -54,15 +59,42 @@ def create_client(
         address=address if address else default_client.address,
         document=document if document else default_client.document,
         check_digit=check_digit if check_digit else default_client.check_digit,
-        document_type=document_type if document_type else default_client.document_type,
-        responsibilities=responsibilities if responsibilities else default_client.responsibilities,
+        document_type=document_type
+        if document_type
+        else default_client.document_type,
+        responsibilities=responsibilities
+        if responsibilities
+        else default_client.responsibilities,
         city_detail=CityDetail(
-            city_name=city_name if city_name else default_client.city_detail.city_name,
-            city_state=city_state if city_state else default_client.city_detail.city_state,
-            city_code=city_code if city_code else default_client.city_detail.city_code,
-            country_code=country_code if country_code else default_client.city_detail.country_code
-        )
+            city_name=city_name
+            if city_name
+            else default_client.city_detail.city_name,
+            city_state=city_state
+            if city_state
+            else default_client.city_detail.city_state,
+            city_code=city_code
+            if city_code
+            else default_client.city_detail.city_code,
+            country_code=country_code
+            if country_code
+            else default_client.city_detail.country_code,
+        ),
     )
+
+
+def create_pirpos_product(
+    product_id: str,
+    name: str,
+    location_stock: List[Dict[str, Any]],
+    sub_products: List[Dict[str, Any]],
+) -> List[Product]:
+    """From pirpos data create product."""
+    pass
+
+
+def create_product(product_id: str, name: str, price: float, taxes: List[str]):
+    """Create product object."""
+    return Product(product_id=product_id, name=name, price=price, taxes=taxes)
 
 
 class ErrorConfigPirposSiigo(Exception):
