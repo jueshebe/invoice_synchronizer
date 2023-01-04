@@ -1,7 +1,7 @@
 """Utils used by clients."""
-from typing import Dict, Union, List
+from typing import Optional
 import json
-from pirpos2siigo.models import Pirpos2SiigoMap
+from pirpos2siigo.models import Pirpos2SiigoMap, Client, CityDetail
 
 
 def load_pirpos2siigo_config(
@@ -30,44 +30,48 @@ def load_pirpos2siigo_config(
             f"""error loading file {file_path}. Error msg: {error}""") from error
 
 
-def clean_document(client_document: str) -> int:
-    """
-    Read client document and parse it to validate it.
-
-    Parameters
-    ----------
-    documentoCliente : str
-        identificacion del cliente en formato string
-            ex: 9 0 1 5 4 7 7 5 7 - 3
-
-    Returns
-    -------
-    int
-        entero del documento del cliente
-        ex: 901547757.
-
-    """
-    if type(client_document) == float or type(client_document) == int:
-        if (
-            math.isnan(client_document) == True
-        ):  # ahora pirpos no pone documento de consumidor final
-            client_document = 222222222222
-
-    if type(client_document) == str:
-        client_document = client_document.replace(" ", "")
-        if "-" in client_document:
-            client_document = client_document[: client_document.find("-")]
-    if client_document == "":
-        client_document = 222222222222
-    return int(str(client_document))
-
+def create_client(
+    configuration_file: Pirpos2SiigoMap,
+    name: str,
+    email: Optional[str] = None,
+    phone: Optional[str] = None,
+    address: Optional[str] = None,
+    document: Optional[str] = None,
+    check_digit: Optional[str] = None,
+    document_type: Optional[str] = None,
+    responsibilities: Optional[str] = None,
+    city_name: Optional[str] = None,
+    city_state: Optional[str] = None,
+    city_code: Optional[str] = None,
+    country_code: Optional[str] = None
+) -> Client:
+    """Create client object."""
+    default_client = configuration_file.default_client
+    return Client(
+        name=name,
+        email=email if email else default_client.email,
+        phone=phone if phone else default_client.phone,
+        address=address if address else default_client.address,
+        document=document if document else default_client.document,
+        check_digit=check_digit if check_digit else default_client.check_digit,
+        document_type=document_type if document_type else default_client.document_type,
+        responsibilities=responsibilities if responsibilities else default_client.responsibilities,
+        city_detail=CityDetail(
+            city_name=city_name if city_name else default_client.city_detail.city_name,
+            city_state=city_state if city_state else default_client.city_detail.city_state,
+            city_code=city_code if city_code else default_client.city_detail.city_code,
+            country_code=country_code if country_code else default_client.city_detail.country_code
+        )
+    )
 
 
 class ErrorConfigPirposSiigo(Exception):
     """File provided doesn't have correct information."""
 
+
 class ErrorPirposToken(Exception):
     """Can't obtain pirpos token."""
+
 
 class ErrorLoadingPirposClients(Exception):
     """Can't download Pirpos clients."""

@@ -1,11 +1,12 @@
 """PirPos client."""
-from typing import Tuple, List, Dict, Union, Optional
+from typing import List
 import os
 import json
 import requests
-import pandas as pd
+from pirpos2siigo.models import Client
 from pirpos2siigo.clients.utils import (
     load_pirpos2siigo_config,
+    create_client,
     ErrorPirposToken,
     ErrorLoadingPirposClients
 )
@@ -62,7 +63,7 @@ class PirposConnector:
             )
         return access_token
 
-    def load_pirpos_clients(self, batch_clients: int = 200) -> pd.DataFrame:
+    def load_pirpos_clients(self, batch_clients: int = 200) -> List[Client]:
         """Load pirpos clients.
 
         Parameters
@@ -76,7 +77,7 @@ class PirposConnector:
           Dataframe with pirpos clients
         """
         page = 0
-        clients = []
+        clients: List[Client] = []
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
@@ -90,29 +91,38 @@ class PirposConnector:
                 raise ErrorLoadingPirposClients(
                     f"Can't download PirPos clients\n {response.text}"
                 )
-            data = response.json()["data"]
+
+            data = response.json()["data"]  # TODO: check incoming data with BaseModel class
             if len(data) == 0:
                 break
-            clients.extend(data)
+
+            for client_data in data:
+                clients.append(create_client(
+                    configuration_file=self._configuration,
+                    name=client_data["name"],
+                    email=client_data.get("email"),
+                    phone=client_data.get("phone"),
+                    address=client_data.get("address"),
+                    document=client_data.get("document"),
+                    check_digit=client_data.get("checkDigit"),
+                    document_type=client_data.get("idDocumentType"),
+                    responsibilities=client_data.get("responsibilities"),
+                    city_name=client_data.get("cityDetail", {}).get("cityName"),
+                    city_state=client_data.get("cityDetail", {}).get("stateName"),
+                    city_code=client_data.get("cityDetail", {}).get("cityCode"),
+                    country_code=client_data.get("cityDetail", {}).get("countryCode")
+                )
+                )
             page += 1
-        clients_db = pd.json_normalize(clients)
-        default_client = {
-            "name": self._configuration.default_client.name,
-            "document": self._configuration.default_client.document,
-        }
 
-        # adding default client
-        clients_db.loc[len(clients_db.index)] = default_client
-        clients_db = clients_db.fillna("")
-        clients_db = clients_db.astype(str)
-        clients_db["document"] = clients_db["document"].apply(clean_document)
+        return clients
 
-        return clients_db
 
 if __name__ == "__main__":
     user_name = os.getenv("PIRPOS_USER_NAME")
     user_password = os.getenv("PIRPOS_PASSWORD")
-    path = "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
-    connector = PirposConnector(user_name, user_password, path)
+    PATH = "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
+    assert isinstance(user_name, str)
+    assert isinstance(user_password, str)
+    connector = PirposConnector(user_name, user_password, PATH)
     loaded_clients = connector.load_pirpos_clients()
-    pass

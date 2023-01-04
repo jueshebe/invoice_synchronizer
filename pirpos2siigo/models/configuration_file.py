@@ -1,6 +1,7 @@
 """Pirpos2Siggo configuration map."""
 from typing import Dict, List, Tuple
 from pydantic import BaseModel
+from pirpos2siigo.models.clients import Client
 
 
 class TaxesMap(BaseModel):
@@ -12,17 +13,10 @@ class TaxesMap(BaseModel):
     tax_id: int
 
 
-class DefaultClient(BaseModel):
-    """Default client used to send invoices."""
-
-    name: str
-    document: int
-
-
 class Pirpos2SiigoMap(BaseModel):
     """Validator for configuration.json file."""
 
     payment_map: Dict[str, int]
     taxes_map: List[TaxesMap]
     invoice_map: Dict[str, int]
-    default_client: DefaultClient
+    default_client: Client
