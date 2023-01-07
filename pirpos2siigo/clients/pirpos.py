@@ -19,7 +19,7 @@ from pirpos2siigo.clients.utils import (
 
 
 class PirposConnector:
-    """Class to manage pirpos invoices and clients."""
+    """Class to manage pirpos invoices, products and clients."""
 
     def __init__(
         self,

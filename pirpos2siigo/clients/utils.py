@@ -178,3 +178,20 @@ class ErrorLoadingPirposProducts(Exception):
 
 class ErrorLoadingPirposInvoices(Exception):
     """Can't download Pirpos Invoices."""
+
+
+class ErrorSiigoToken(Exception):
+    """Can't obtain siigo token."""
+
+
+class ErrorLoadingSiigoClients(Exception):
+    """Can't download Siigo clients."""
+
+
+class ErrorLoadingSiigoProducts(Exception):
+    """Can't download Siigo clients."""
+
+
+class ErrorLoadingSiigoInvoices(Exception):
+
+    """Can't download Siigo Invoices."""
