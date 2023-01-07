@@ -1,5 +1,6 @@
 """Utils used by clients."""
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
+from datetime import datetime
 import json
 from pirpos2siigo.models import (
     Pirpos2SiigoMap,
@@ -7,6 +8,9 @@ from pirpos2siigo.models import (
     CityDetail,
     Product,
     TaxInfo,
+    Invoice,
+    Employee,
+    InvoiceProduct,
 )
 
 
@@ -85,16 +89,75 @@ def create_client(
 def create_pirpos_product(
     product_id: str,
     name: str,
-    location_stock: List[Dict[str, Any]],
+    location_stock: Dict[str, Any],
     sub_products: List[Dict[str, Any]],
 ) -> List[Product]:
     """From pirpos data create product."""
-    pass
+    products: List[Product] = []
+
+    if len(sub_products) == 0:
+        products.append(
+            create_product(
+                product_id,
+                name,
+                location_stock["price"],
+                [(float(location_stock["tax"]["percentage"])) / 100],
+            )
+        )
+    else:
+        for sub_product in sub_products:
+            product_id = sub_product["_id"]
+            products.append(
+                create_product(
+                    product_id,
+                    sub_product["name"],
+                    sub_product["locationsStock"][0]["price"],
+                    [(float(location_stock["tax"]["percentage"])) / 100],
+                )
+            )
+    return products
 
 
-def create_product(product_id: str, name: str, price: float, taxes: List[str]):
+def create_product(
+    product_id: str, name: str, price: float, taxes: List[float]
+) -> Product:
     """Create product object."""
     return Product(product_id=product_id, name=name, price=price, taxes=taxes)
+
+
+def create_invoice(
+    cachier_name: str,
+    cachier_id: str,
+    seller_name: str,
+    seller_id: str,
+    client: Client,
+    created_on: datetime,
+    invoice_prefix: str,
+    invoice_number: int,
+    payment_method: List[Tuple[str, float]],
+    invoice_products: List[Tuple[Product, float, int, float]],
+    total: float,
+) -> Invoice:
+    """Create invoice."""
+    return Invoice(
+        cachier=Employee(name=cachier_name, employee_id=cachier_id),
+        seller=Employee(name=seller_name, employee_id=seller_id),
+        client=client,
+        created_on=created_on,
+        invoice_prefix=invoice_prefix,
+        invoice_number=invoice_number,
+        payment_method=payment_method,
+        products=[
+            InvoiceProduct(
+                product=invoice_product[0],
+                price=invoice_product[1],
+                quantity=invoice_product[2],
+                tax=invoice_product[3],
+            )
+            for invoice_product in invoice_products
+        ],
+        total=total,
+    )
 
 
 class ErrorConfigPirposSiigo(Exception):
@@ -107,3 +170,11 @@ class ErrorPirposToken(Exception):
 
 class ErrorLoadingPirposClients(Exception):
     """Can't download Pirpos clients."""
+
+
+class ErrorLoadingPirposProducts(Exception):
+    """Can't download Pirpos clients."""
+
+
+class ErrorLoadingPirposInvoices(Exception):
+    """Can't download Pirpos Invoices."""

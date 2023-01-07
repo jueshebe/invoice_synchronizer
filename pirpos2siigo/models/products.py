@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class TaxInfo(Enum):
     """Stock information."""
 
+    No_IMP = 0.0
     IVA = 0.19
     I_CONSUMO = 0.08
 

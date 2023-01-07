@@ -1,3 +1,4 @@
+"""Models."""
 from pirpos2siigo.models.configuration_file import (
     Pirpos2SiigoMap,
     TaxesMap,
@@ -9,3 +10,4 @@ from pirpos2siigo.models.clients import (
     CityDetail,
 )
 from pirpos2siigo.models.products import Product, TaxInfo
+from pirpos2siigo.models.invoices import Employee, InvoiceProduct, Invoice
