@@ -178,7 +178,7 @@ def create_invoice(
     created_on: datetime,
     invoice_prefix: str,
     invoice_number: int,
-    payments: List[Dict[str, Union[str, int]]],
+    payments: List[Tuple[Union[str, int], float]],
     invoice_products: List[Tuple[Product, float, int, str]],
     total: float,
 ) -> Invoice:
@@ -192,10 +192,11 @@ def create_invoice(
         invoice_number=invoice_number,
         payment_method=[
             (
-                get_payment_map(configuration, payment["paymentMethod"]),
-                payment["value"],
+                get_payment_map(configuration, payment[0]),
+                payment[1],
             )
-            for payment in payments if payment["value"]
+            for payment in payments
+            if payment[1]
         ],
         products=[
             InvoiceProduct(
@@ -243,5 +244,4 @@ class ErrorLoadingSiigoProducts(Exception):
 
 
 class ErrorLoadingSiigoInvoices(Exception):
-
     """Can't download Siigo Invoices."""

@@ -34,8 +34,8 @@ class PirposConnector:
         self.__pirpos_access_token = self.__get_pirpos_access_token()
         self.__products: List[Product]
         self.__clients: List[Client]
-        self.load_pirpos_clients()
-        self.load_pirpos_products()
+        self.get_pirpos_clients()
+        self.get_pirpos_products()
 
     def __get_pirpos_access_token(self) -> str:
         """Get pirpos access token to comunicate with the server.
@@ -73,8 +73,8 @@ class PirposConnector:
             )
         return access_token
 
-    def load_pirpos_clients(self, batch_clients: int = 200) -> None:
-        """Load pirpos clients.
+    def get_pirpos_clients(self, batch_clients: int = 200) -> None:
+        """Get pirpos clients.
 
         Parameters
         ----------
@@ -130,12 +130,7 @@ class PirposConnector:
 
         self.__clients = clients
 
-    @property
-    def clients(self) -> List[Client]:
-        """Getter for clients."""
-        return self.__clients
-
-    def load_pirpos_products(self, batch_products: int = 200) -> None:
+    def get_pirpos_products(self, batch_products: int = 200) -> None:
         """Get created products on pirpos.
 
         Parameters
@@ -184,12 +179,7 @@ class PirposConnector:
             page += 1
         self.__products = products
 
-    @property
-    def products(self) -> List[Product]:
-        """Getter for clients."""
-        return self.__products
-
-    def load_pirpos_invoices_per_client(
+    def get_pirpos_invoices_per_client(
         self, init_day: datetime, end_day: datetime, step_days: int = 10
     ) -> List[Invoice]:
         """Get invoices per client on pirpos.
@@ -266,9 +256,7 @@ class PirposConnector:
                         client = self.__configuration.default_client
 
                     # select products
-                    invoice_products: List[
-                        Tuple[Product, float, int, float]
-                    ] = []
+                    invoice_products: List[Tuple[Product, float, int, str]] = []
                     for product_info in invoice_info["products"]:
                         product_id = product_info["idInternal"]
 
@@ -287,7 +275,9 @@ class PirposConnector:
                         price = product_info["price"]
                         quantity = product_info["quantity"]
                         tax_name = invoice_info["taxes"][0]["name"]
-                        invoice_products.append((product, price, quantity, tax_name))
+                        invoice_products.append(
+                            (product, price, quantity, tax_name)
+                        )
 
                     invoice_obj = create_invoice(
                         configuration=self.__configuration,
@@ -299,7 +289,12 @@ class PirposConnector:
                         created_on=invoice_info["createdOn"],
                         invoice_prefix=invoice_info["invoicePrefix"],
                         invoice_number=invoice_info["seq"],
-                        payments=invoice_info["paid"]["paymentMethodValue"],
+                        payments=[
+                            (payment["paymentMethod"], payment["value"])
+                            for payment in invoice_info["paid"][
+                                "paymentMethodValue"
+                            ]
+                        ],
                         invoice_products=invoice_products,
                         total=invoice_info["total"],
                     )
@@ -322,6 +317,16 @@ class PirposConnector:
 
         return invoices_per_client
 
+    @property
+    def clients(self) -> List[Client]:
+        """Getter for clients."""
+        return self.__clients
+
+    @property
+    def products(self) -> List[Product]:
+        """Getter for clients."""
+        return self.__products
+
 
 if __name__ == "__main__":
     user_name = os.getenv("PIRPOS_USER_NAME")
@@ -335,7 +340,7 @@ if __name__ == "__main__":
     connector = PirposConnector(user_name, user_password, PATH)
     print(time.time() - time_1)
     date_1 = datetime(2022, 11, 2)
-    date_2 = datetime(2022, 12, 2)
+    date_2 = datetime(2022, 11, 2)
     time_1 = time.time()
-    loaded_invoices = connector.load_pirpos_invoices_per_client(date_1, date_2)
+    loaded_invoices = connector.get_pirpos_invoices_per_client(date_1, date_2)
     print(time.time() - time_1)

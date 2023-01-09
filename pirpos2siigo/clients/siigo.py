@@ -5,11 +5,10 @@ import json
 import time
 from datetime import datetime, timedelta
 import requests
-from pirpos2siigo.models import Client, Product, Invoice
+from pirpos2siigo.models import Client, Product, Invoice, TaxInfo
 from pirpos2siigo.clients.utils import (
     load_pirpos2siigo_config,
     create_client,
-    create_product,
     create_invoice,
     ErrorSiigoToken,
     ErrorLoadingSiigoClients,
@@ -76,7 +75,7 @@ class SiigoConnector:
 
         return access_token
 
-    def get_siigo_clients(self, page_size: int = 200) -> None:
+    def get_siigo_clients(self, page_size: int = 100) -> None:
         """Load Siigo clients.
 
         Parameters
@@ -153,13 +152,13 @@ class SiigoConnector:
                     .get("city", {})
                     .get(
                         "country_code"
-                    ),  # TODO: check this with pirpos. use Enum
+                    ),
                 )
                 clients.append(client)
             page += 1
         self.__clients = clients
 
-    def get_siigo_products(self, batch_products: int = 200) -> None:
+    def get_siigo_products(self, batch_products: int = 100) -> None:
         """Get created products on Siigo.
 
         Parameters
@@ -219,17 +218,17 @@ class SiigoConnector:
                 break
 
             for product_info in data:
-                taxes = []
+                taxes: List[TaxInfo] = []
                 for tax_info in self.__configuration.taxes_map:
                     if tax_info.siigo_name in [
                         product_info["tax1name"],
                         product_info["tax2name"],
                         product_info["tax3name"],
                     ]:
-                        taxes.append(tax_info.value)
+                        taxes.append(tax_info)
 
                 products.append(
-                    create_product(
+                    Product(
                         product_id=product_info["Code"],
                         name=product_info["Description"],
                         price=product_info["Precio de venta 1"]
@@ -246,7 +245,7 @@ class SiigoConnector:
         self,
         init_day: datetime,
         end_day: datetime,
-        page_size: int = 50,
+        page_size: int = 100,
     ) -> List[Invoice]:
         """Load Siigo invoices.
 
@@ -256,10 +255,10 @@ class SiigoConnector:
           List with Siigo invoices
         """
         day1 = init_day.strftime("%Y-%m-%d")
-        day2 = end_day.strftime("%Y-%m-%d")
+        day2 = (end_day + timedelta(days=1)).strftime("%Y-%m-%d")
         url = (
-            f"https://api.siigo.com/v1/invoices?created_end={day2}"
-            f"&created_start={day1}"
+            f"https://api.siigo.com/v1/invoices?date_end={day2}"
+            f"&date_start={day1}"
             "&page={page}&"
             f"page_size={page_size}"
         )
@@ -279,7 +278,7 @@ class SiigoConnector:
                 data=payload,
             )
             if not response.ok:
-                raise ErrorLoadingSiigoClients(
+                raise ErrorLoadingSiigoInvoices(
                     f"Can't download Siigo clients\n {response.text}"
                 )
 
@@ -308,16 +307,41 @@ class SiigoConnector:
                 else:
                     client = self.__configuration.default_client
 
+                # select products
+                invoice_products: List[
+                    Tuple[Product, float, int, str]
+                ] = []
+                for product_info in invoice_info["items"]:
+                    product_id = product_info["code"]
+
+                    def filter_product(
+                        product: Product, product_id: str = product_id
+                    ) -> bool:
+                        return product.product_id == product_id
+
+                    filtered_products: List[Product] = list(
+                        filter(filter_product, self.__products)
+                    )
+                    if len(filtered_products) > 0:
+                        product = filtered_products[0]
+                    else:
+                        product = self.__products[0]
+                    price = product_info["total"]
+                    quantity = product_info["quantity"]
+                    tax_name = product_info["taxes"][0]["name"]
+                    invoice_products.append((product, price, quantity, tax_name))
+
                 invoice_obj = create_invoice(
+                    self.__configuration,
                     cachier_name="",
                     cachier_id="",
                     seller_name="",
                     seller_id="",
                     client=client,
-                    created_on=invoice_info["date"]
-                    invoice_prefix=invoice_info["prefix"],
+                    created_on=datetime.strptime(invoice_info["date"], "%Y-%m-%d"),
+                    invoice_prefix=invoice_info["document"]["id"],
                     invoice_number=invoice_info["number"],
-                    payment_method=[
+                    payments=[
                         (payment["id"], payment["value"])
                         for payment in invoice_info["payments"]
                         if payment["value"] is not None
@@ -329,6 +353,16 @@ class SiigoConnector:
             page += 1
 
         return invoices
+
+    @property
+    def clients(self) -> List[Client]:
+        """Clients property."""
+        return self.__clients
+
+    @property
+    def products(self) -> List[Product]:
+        """Products property."""
+        return self.__products
 
 
 if __name__ == "__main__":
@@ -342,6 +376,6 @@ if __name__ == "__main__":
     assert isinstance(user_password, str)
     connector = SiigoConnector(user_name, user_password, PATH)
     date_1 = datetime(2022, 9, 2)
-    date_2 = datetime(2022, 10, 2)
+    date_2 = datetime(2022, 9, 2)
     list_invoices = connector.get_siigo_invoices(date_1, date_2, 100)
     pass

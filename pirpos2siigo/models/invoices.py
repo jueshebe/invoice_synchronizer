@@ -29,7 +29,7 @@ class Payment(BaseModel):
     """Payment model."""
 
     pirpos_name: str
-    siigo_id: str
+    siigo_id: int
 
 
 class Prefix(BaseModel):
