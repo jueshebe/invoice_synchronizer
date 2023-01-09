@@ -25,6 +25,20 @@ class InvoiceProduct(BaseModel):
     quantity: int
     tax: TaxInfo
 
+class Payment(BaseModel):
+    """Payment model."""
+
+    pirpos_name: str
+    siigo_id: str
+
+
+class Prefix(BaseModel):
+    """Prefix model."""
+
+    prefix: str
+    siigo_id: int
+    siigo_code: int
+
 
 class Invoice(BaseModel):
     """Invoice model."""
@@ -33,8 +47,8 @@ class Invoice(BaseModel):
     seller: Employee
     client: Client
     created_on: datetime
-    invoice_prefix: str
+    invoice_prefix: Prefix
     invoice_number: int
-    payment_method: List[Tuple[str, float]]
+    payment_method: List[Tuple[Payment, float]]
     products: List[InvoiceProduct]
     total: float

@@ -4,12 +4,13 @@ from typing import List
 from pydantic import BaseModel
 
 
-class TaxInfo(Enum):
+class TaxInfo(BaseModel):
     """Stock information."""
 
-    No_IMP = 0.0
-    IVA = 0.19
-    I_CONSUMO = 0.08
+    pirpos_name: str
+    siigo_name: str
+    siigo_id: int
+    value: float
 
 
 class Product(BaseModel):

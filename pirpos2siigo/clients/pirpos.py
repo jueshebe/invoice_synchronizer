@@ -31,13 +31,13 @@ class PirposConnector:
         self.__pirpos_username = pirpos_username
         self.__pirpos_password = pirpos_password
         self.__configuration = load_pirpos2siigo_config(configuration_path)
-        self.__pirpos_access_token = self.__get_siigo_access_token()
+        self.__pirpos_access_token = self.__get_pirpos_access_token()
         self.__products: List[Product]
         self.__clients: List[Client]
         self.load_pirpos_clients()
         self.load_pirpos_products()
 
-    def __get_siigo_access_token(self) -> str:
+    def __get_pirpos_access_token(self) -> str:
         """Get pirpos access token to comunicate with the server.
 
         Raises
@@ -173,7 +173,11 @@ class PirposConnector:
                 sub_products = product_info["subProducts"]
                 products.extend(
                     create_pirpos_product(
-                        product_id, name, location_stock, sub_products
+                        self.__configuration,
+                        product_id,
+                        name,
+                        location_stock,
+                        sub_products,
                     )
                 )
 
@@ -243,7 +247,9 @@ class PirposConnector:
             for invoice_info in data:
                 try:
                     # select client
-                    client_document = invoice_info["client"].get("document", None)
+                    client_document = invoice_info["client"].get(
+                        "document", None
+                    )
 
                     def filter_client(
                         client: Client, document: str = client_document
@@ -280,10 +286,11 @@ class PirposConnector:
                             product = self.__products[0]
                         price = product_info["price"]
                         quantity = product_info["quantity"]
-                        tax = float(invoice_info["taxes"][0]["value"]) / 100
-                        invoice_products.append((product, price, quantity, tax))
+                        tax_name = invoice_info["taxes"][0]["name"]
+                        invoice_products.append((product, price, quantity, tax_name))
 
                     invoice_obj = create_invoice(
+                        configuration=self.__configuration,
                         cachier_name=invoice_info["cashier"]["name"],
                         cachier_id=invoice_info["cashier"]["idInternal"],
                         seller_name=invoice_info["seller"]["name"],
@@ -292,16 +299,12 @@ class PirposConnector:
                         created_on=invoice_info["createdOn"],
                         invoice_prefix=invoice_info["invoicePrefix"],
                         invoice_number=invoice_info["seq"],
-                        payment_method=[
-                            (payment["paymentMethod"], payment["value"])
-                            for payment in invoice_info["paid"][
-                                "paymentMethodValue"
-                            ] if payment["value"] is not None
-                        ],
+                        payments=invoice_info["paid"]["paymentMethodValue"],
                         invoice_products=invoice_products,
                         total=invoice_info["total"],
                     )
                     invoices_per_client.append(invoice_obj)
+
                 except Exception as error:
                     print(
                         f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}",
@@ -330,11 +333,9 @@ if __name__ == "__main__":
     assert isinstance(user_password, str)
     time_1 = time.time()
     connector = PirposConnector(user_name, user_password, PATH)
-    print(time.time()-time_1)
-    # loaded_clients = connector.load_pirpos_clients()
-    # loaded_products = connector.load_pirpos_products()
+    print(time.time() - time_1)
     date_1 = datetime(2022, 11, 2)
     date_2 = datetime(2022, 12, 2)
     time_1 = time.time()
     loaded_invoices = connector.load_pirpos_invoices_per_client(date_1, date_2)
-    print(time.time()-time_1)
+    print(time.time() - time_1)

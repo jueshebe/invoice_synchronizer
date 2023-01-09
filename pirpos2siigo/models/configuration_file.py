@@ -1,22 +1,24 @@
 """Pirpos2Siggo configuration map."""
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from pydantic import BaseModel
 from pirpos2siigo.models.clients import Client
+from pirpos2siigo.models.products import TaxInfo
+from pirpos2siigo.models.invoices import Payment
 
 
-class TaxesMap(BaseModel):
-    """Map for taxes."""
+class InvoiceMap(BaseModel):
+    """Map for invoices."""
 
-    pirpos_name: str
-    siigo_name: str
-    value: float
-    tax_id: int
+    prefix: str
+    siigo_id: int
+    siigo_code: int
 
 
 class Pirpos2SiigoMap(BaseModel):
     """Validator for configuration.json file."""
 
-    payment_map: Dict[str, int]
-    taxes_map: List[TaxesMap]
-    invoice_map: Dict[str, int]
+    payment_map: List[Payment]
+    taxes_map: List[TaxInfo]
+    prefix_map: List[InvoiceMap]
     default_client: Client
+    retentions: List[TaxInfo]

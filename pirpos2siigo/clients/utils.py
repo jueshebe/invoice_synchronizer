@@ -1,5 +1,5 @@
 """Utils used by clients."""
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Union
 from datetime import datetime
 import json
 from pirpos2siigo.models import (
@@ -9,6 +9,8 @@ from pirpos2siigo.models import (
     Product,
     TaxInfo,
     Invoice,
+    InvoiceMap,
+    Payment,
     Employee,
     InvoiceProduct,
 )
@@ -47,7 +49,7 @@ def create_client(
     address: Optional[str] = None,
     document: Optional[str] = None,
     check_digit: Optional[str] = None,
-    document_type: Optional[str] = None,
+    document_type: Optional[int] = None,
     responsibilities: Optional[str] = None,
     city_name: Optional[str] = None,
     city_state: Optional[str] = None,
@@ -86,7 +88,23 @@ def create_client(
     )
 
 
+def get_tax_map(configuration: Pirpos2SiigoMap, name_key: str) -> TaxInfo:
+    """Find tax mapping."""
+    for tax_map in configuration.taxes_map:
+        if name_key in [tax_map.siigo_name, tax_map.pirpos_name]:
+            return TaxInfo(
+                pirpos_name=tax_map.pirpos_name,
+                siigo_name=tax_map.siigo_name,
+                siigo_id=tax_map.siigo_id,
+                value=tax_map.value,
+            )
+    raise ValueError(
+        f"name_key {name_key} not recognized, check configuration file."
+    )
+
+
 def create_pirpos_product(
+    configuration: Pirpos2SiigoMap,
     product_id: str,
     name: str,
     location_stock: Dict[str, Any],
@@ -96,36 +114,62 @@ def create_pirpos_product(
     products: List[Product] = []
 
     if len(sub_products) == 0:
+
         products.append(
-            create_product(
-                product_id,
-                name,
-                location_stock["price"],
-                [(float(location_stock["tax"]["percentage"])) / 100],
+            Product(
+                product_id=product_id,
+                name=name,
+                price=location_stock["price"],
+                taxes=[
+                    get_tax_map(configuration, location_stock["tax"]["name"])
+                ],
             )
         )
     else:
         for sub_product in sub_products:
             product_id = sub_product["_id"]
             products.append(
-                create_product(
-                    product_id,
-                    sub_product["name"],
-                    sub_product["locationsStock"][0]["price"],
-                    [(float(location_stock["tax"]["percentage"])) / 100],
+                Product(
+                    product_id=product_id,
+                    name=sub_product["name"],
+                    price=sub_product["locationsStock"][0]["price"],
+                    taxes=[
+                        get_tax_map(
+                            configuration, location_stock["tax"]["name"]
+                        )
+                    ],
                 )
             )
     return products
 
 
-def create_product(
-    product_id: str, name: str, price: float, taxes: List[float]
-) -> Product:
-    """Create product object."""
-    return Product(product_id=product_id, name=name, price=price, taxes=taxes)
+def get_prefix_map(
+    configuration: Pirpos2SiigoMap, key_value: Union[str, int]
+) -> InvoiceMap:
+    """Find prefix mapping."""
+    for prefix_map in configuration.prefix_map:
+        if key_value in [prefix_map.prefix, prefix_map.siigo_id]:
+            return prefix_map
+    raise ValueError(
+        f"key_value {key_value} not recognized for prefix map, check configuration file."
+    )
+
+
+def get_payment_map(
+    configuration: Pirpos2SiigoMap, key_value: Union[str, int]
+) -> Payment:
+    """Find prefix mapping."""
+    payments_map = configuration.payment_map
+    for payment_map in payments_map:
+        if key_value in [payment_map.pirpos_name, payment_map.siigo_id]:
+            return payment_map
+    raise ValueError(
+        f"key_value {key_value} not recognized for payments map, check configuration file."
+    )
 
 
 def create_invoice(
+    configuration: Pirpos2SiigoMap,
     cachier_name: str,
     cachier_id: str,
     seller_name: str,
@@ -134,8 +178,8 @@ def create_invoice(
     created_on: datetime,
     invoice_prefix: str,
     invoice_number: int,
-    payment_method: List[Tuple[str, float]],
-    invoice_products: List[Tuple[Product, float, int, float]],
+    payments: List[Dict[str, Union[str, int]]],
+    invoice_products: List[Tuple[Product, float, int, str]],
     total: float,
 ) -> Invoice:
     """Create invoice."""
@@ -144,15 +188,21 @@ def create_invoice(
         seller=Employee(name=seller_name, employee_id=seller_id),
         client=client,
         created_on=created_on,
-        invoice_prefix=invoice_prefix,
+        invoice_prefix=get_prefix_map(configuration, invoice_prefix),
         invoice_number=invoice_number,
-        payment_method=payment_method,
+        payment_method=[
+            (
+                get_payment_map(configuration, payment["paymentMethod"]),
+                payment["value"],
+            )
+            for payment in payments if payment["value"]
+        ],
         products=[
             InvoiceProduct(
                 product=invoice_product[0],
                 price=invoice_product[1],
                 quantity=invoice_product[2],
-                tax=invoice_product[3],
+                tax=get_tax_map(configuration, invoice_product[3]),
             )
             for invoice_product in invoice_products
         ],

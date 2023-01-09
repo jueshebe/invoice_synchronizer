@@ -35,6 +35,9 @@ class DocumentType(Enum):
     PASAPORTE = 41
     TIPO_DOCUMENTO_EXTRANJERO = 42
     SIN_IDENTIFICAR = 43
+    PEP = 47
+    NIT_OTRO_PAIS = 50
+    NUIP = 91
 
 
 class Client(BaseModel):
