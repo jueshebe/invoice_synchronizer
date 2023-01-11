@@ -2,18 +2,21 @@
 from typing import List, Tuple
 import os
 import json
-import time
 from datetime import datetime, timedelta
 import requests
-from pirpos2siigo.models import Client, Product, Invoice, TaxInfo
+from pirpos2siigo.models import Client, DocumentType, Product, Invoice, TaxInfo
 from pirpos2siigo.clients.utils import (
     load_pirpos2siigo_config,
     create_client,
     create_invoice,
+    get_missing_outdated_clients,
     ErrorSiigoToken,
     ErrorLoadingSiigoClients,
     ErrorLoadingSiigoProducts,
     ErrorLoadingSiigoInvoices,
+    ErrorCreatingSiigoClient,
+    ErrorUpdatingSiigoClient
+
 )
 
 
@@ -129,7 +132,9 @@ class SiigoConnector:
 
                 client = create_client(
                     configuration_file=self.__configuration,
-                    name=client_data["name"][0],
+                    siigo_id=client_data["id"],
+                    pirpos_id=None,
+                    name=" ".join(client_data["name"]),
                     email=contacts.get("email"),
                     phone=contacts.get("phone", {}).get("number"),
                     address=client_data.get("address", {}).get("address"),
@@ -150,9 +155,10 @@ class SiigoConnector:
                     .get("city_code"),  # TODO: check this with pirpos. use Enum
                     country_code=client_data.get("address", {})
                     .get("city", {})
-                    .get(
-                        "country_code"
-                    ),
+                    .get("country_code"),
+                    state_code=client_data.get("address", {})
+                    .get("city", {})
+                    .get("state_code"),
                 )
                 clients.append(client)
             page += 1
@@ -308,9 +314,7 @@ class SiigoConnector:
                     client = self.__configuration.default_client
 
                 # select products
-                invoice_products: List[
-                    Tuple[Product, float, int, str]
-                ] = []
+                invoice_products: List[Tuple[Product, float, int, str]] = []
                 for product_info in invoice_info["items"]:
                     product_id = product_info["code"]
 
@@ -329,7 +333,9 @@ class SiigoConnector:
                     price = product_info["total"]
                     quantity = product_info["quantity"]
                     tax_name = product_info["taxes"][0]["name"]
-                    invoice_products.append((product, price, quantity, tax_name))
+                    invoice_products.append(
+                        (product, price, quantity, tax_name)
+                    )
 
                 invoice_obj = create_invoice(
                     self.__configuration,
@@ -338,7 +344,9 @@ class SiigoConnector:
                     seller_name="",
                     seller_id="",
                     client=client,
-                    created_on=datetime.strptime(invoice_info["date"], "%Y-%m-%d"),
+                    created_on=datetime.strptime(
+                        invoice_info["date"], "%Y-%m-%d"
+                    ),
                     invoice_prefix=invoice_info["document"]["id"],
                     invoice_number=invoice_info["number"],
                     payments=[
@@ -353,6 +361,198 @@ class SiigoConnector:
             page += 1
 
         return invoices
+
+    def create_clients(self, clients: List[Client]) -> None:
+        """Create list of clients.
+
+        Parameters
+        ----------
+        clients : List[Client]
+            list of clients to be created
+        """
+        url = "https://api.siigo.com/v1/customers"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+        }
+
+        for client in clients:
+            full_name = client.name.split(" ")
+            name, last_name = [full_name[0], " ".join(full_name[1:])]
+            if client.document_type == DocumentType.NIT:
+                person_type = "Company"
+                client_name = [client.name]
+            else:
+                person_type = "Person"
+                client_name = [name, last_name]
+
+            payload = {
+                "type": "Customer",
+                "person_type": person_type,
+                "id_type": str(client.document_type.value),
+                "identification": str(client.document),
+                "check_digit": str(client.check_digit),
+                "name": client_name,
+                "commercial_name": "",
+                "branch_office": 0,
+                "active": "true",
+                "vat_responsible": "false",
+                "fiscal_responsibilities": [{"code": client.responsibilities.value}],
+                "address": {
+                    "address": client.address,
+                    "city": {
+                        "country_code": str(client.city_detail.country_code),
+                        "state_code": str(client.city_detail.state_code),
+                        "city_code": str(client.city_detail.city_code),
+                    },
+                    "postal_code": "",
+                },
+                "phones": [
+                    {
+                        "indicative": "",
+                        "number": client.phone,
+                        "extension": "",
+                    }
+                ],
+                "contacts": [
+                    {
+                        "first_name": name,
+                        "last_name": last_name,
+                        "email": client.email,
+                        "phone": {
+                            "indicative": "",
+                            "number": client.phone,
+                            "extension": "",
+                        },
+                    }
+                ],
+                "comments": "Created from Pirpos2Siigo software",
+                # "related_users": {"seller_id": 629, "collector_id": 629},
+            }
+
+            response = requests.request(
+                "POST",
+                url,
+                headers=headers,
+                data=str(payload),
+            )
+            if not response.ok:
+                raise ErrorCreatingSiigoClient(
+                    f"Can't download Siigo clients\n {response.text}"
+                )
+
+    def _update_clients(self, clients: List[Client]) -> None:
+        """Update list of clients.
+
+        Parameters
+        ----------
+        clients : List[Client]
+            list of clients to be updated
+        """
+        url = "https://api.siigo.com/v1/customers/{siigo_id}"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+        }
+
+        for client in clients:
+            full_name = client.name.split(" ")
+            name, last_name = [full_name[0], " ".join(full_name[1:])]
+            if client.document_type == DocumentType.NIT:
+                person_type = "Company"
+                client_name = [client.name]
+            else:
+                person_type = "Person"
+                client_name = [name, last_name]
+
+            client_url = url.format(siigo_id=client.siigo_id)
+            payload = {
+                "type": "Customer",
+                "person_type": person_type,
+                "id_type": str(client.document_type.value),
+                "identification": str(client.document),
+                "check_digit": str(client.check_digit),
+                "name": client_name,
+                "commercial_name": "",
+                "branch_office": 0,
+                "active": "true",
+                "vat_responsible": "false",
+                "fiscal_responsibilities": [{"code": client.responsibilities.value}],
+                "address": {
+                    "address": client.address,
+                    "city": {
+                        "country_code": str(client.city_detail.country_code),
+                        "state_code": str(client.city_detail.state_code),
+                        "city_code": str(client.city_detail.city_code),
+                    },
+                    "postal_code": "",
+                },
+                "phones": [
+                    {
+                        "indicative": "",
+                        "number": client.phone,
+                        "extension": "",
+                    }
+                ],
+                "contacts": [
+                    {
+                        "first_name": name,
+                        "last_name": last_name,
+                        "email": client.email,
+                        "phone": {
+                            "indicative": "",
+                            "number": client.phone,
+                            "extension": "",
+                        },
+                    }
+                ],
+                "comments": "Created from Pirpos2Siigo software",
+                # "related_users": {"seller_id": 629, "collector_id": 629},
+            }
+
+            response = requests.request(
+                "PUT",
+                client_url,
+                headers=headers,
+                data=str(payload),
+            )
+            if not response.ok:
+                raise ErrorUpdatingSiigoClient(
+                    f"Can't download Siigo clients\n {response.text}"
+                )
+    def update_clients(
+        self, clients: List[Client], must_download: bool = False
+    ) -> None:
+        """Update and create client on siigo.
+
+        Errors will be saved on ./errors/errors_clients.json
+
+        Parameters
+        ----------
+        clients : List[Client]
+            List of outdated clients
+        must_download: bool
+            download siigo clients
+        """
+        errors_backup = {}
+        errors = False
+        error_count = 0
+
+        # get actual siigo clients
+        if must_download:
+            self.get_siigo_clients()
+
+        # get missing and ourdated clients
+        missing_clients, outdated_clients = get_missing_outdated_clients(
+            clients, self.clients
+        )
+
+        if len(missing_clients) > 0:
+            self.create_clients(missing_clients)
+
+        if len(outdated_clients) > 0:
+            self._update_clients(outdated_clients)
+
 
     @property
     def clients(self) -> List[Client]:
@@ -375,7 +575,17 @@ if __name__ == "__main__":
     assert isinstance(user_name, str)
     assert isinstance(user_password, str)
     connector = SiigoConnector(user_name, user_password, PATH)
-    date_1 = datetime(2022, 9, 2)
-    date_2 = datetime(2022, 9, 2)
-    list_invoices = connector.get_siigo_invoices(date_1, date_2, 100)
+
+    # test download invoices
+    # date_1 = datetime(2022, 9, 2)
+    # date_2 = datetime(2022, 9, 2)
+    # list_invoices = connector.get_siigo_invoices(date_1, date_2, 100)
+
+    test_client_json = connector.clients[0].json()
+    test_client = Client(**json.loads(test_client_json))
+    test_client.name = "Julian test2"
+    test_client.document = 1121923076
+    # connector.create_clients([test_client])
+    # connector._update_clients([test_client])
+    connector.update_clients([test_client])
     pass

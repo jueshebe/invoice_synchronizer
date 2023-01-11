@@ -109,6 +109,8 @@ class PirposConnector:
                 client = create_client(
                     configuration_file=self.__configuration,
                     name=client_data["name"],
+                    siigo_id=None,
+                    pirpos_id=client_data.get("_id"),
                     email=client_data.get("email"),
                     phone=client_data.get("phone"),
                     address=client_data.get("address"),
@@ -123,6 +125,9 @@ class PirposConnector:
                     city_code=client_data.get("cityDetail", {}).get("cityCode"),
                     country_code=client_data.get("cityDetail", {}).get(
                         "countryCode"
+                    ),
+                    state_code=client_data.get("cityDetail", {}).get(
+                        "stateCode"
                     ),
                 )
                 clients.append(client)

@@ -1,6 +1,6 @@
 """Model for clients."""
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 from pydantic import BaseModel, validator
 
 
@@ -9,8 +9,9 @@ class CityDetail(BaseModel):
 
     city_name: str
     city_state: str
-    city_code: str
-    country_code: str
+    city_code: int
+    country_code: str  # TODO: Must be Enum
+    state_code: int
 
 
 class Responsibilities(Enum):
@@ -43,41 +44,17 @@ class DocumentType(Enum):
 class Client(BaseModel):
     """Client info."""
 
+    siigo_id: Optional[str]
+    pirpos_id: Optional[str]
     name: str
     email: str
     phone: str
     address: str
-    document: str
-    check_digit: Optional[str]
+    document: int
+    check_digit: Optional[int]
     document_type: DocumentType
     responsibilities: Responsibilities
     city_detail: CityDetail
-
-    @validator("document")
-    @classmethod
-    def clean_document(cls, document: str) -> str:
-        """Read client document and validate it.
-
-        Parameters
-        ----------
-        document : str
-            ex: 9 0 1 5 4 7 7 5 7 - 3
-
-        Returns
-        -------
-        str
-            return -> '901547757'.
-        """
-        # if isinstance(document, (float, int)):
-        #     if math.isnan(document):
-        #         document = "222222222222"
-
-        document = document.replace(" ", "")
-        if "-" in document:
-            document = document[: document.find("-")]
-        # if document == "":
-        #      document = 222222222222
-        return document
 
     @validator("phone")
     @classmethod

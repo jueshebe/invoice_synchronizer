@@ -1148,12 +1148,16 @@ class Connector:
             data_frame = pd.DataFrame(
                 np_pqt[:, 1:], index=np_pqt[:, 0], columns=["quantity", "total"]
             )
-            data_frame[["quantity", "total"]] = data_frame[["quantity", "total"]].apply(pd.to_numeric)
+            data_frame[["quantity", "total"]] = data_frame[
+                ["quantity", "total"]
+            ].apply(pd.to_numeric)
         else:
             data_frame = pd.DataFrame([], columns=["quantity", "total"])
         return data_frame
 
-    def get_history_sold_units(self, years_months: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def get_history_sold_units(
+        self, years_months: List[str]
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """get quantity and total sold for each product in a list of periods [year-month]
 
         Parameters
@@ -1177,19 +1181,26 @@ class Connector:
             info_df = self._get_sold_units(date1, date2)
             history_df_quantity[date1.strftime("%Y-%m")] = info_df["quantity"]
             history_df_total[date1.strftime("%Y-%m")] = info_df["total"]
-        history_df_quantity['Total'] = history_df_quantity.sum(axis=1)
-        history_df_total['Total'] = history_df_total.sum(axis=1)
+        history_df_quantity["Total"] = history_df_quantity.sum(axis=1)
+        history_df_total["Total"] = history_df_total.sum(axis=1)
 
-        history_df_quantity = history_df_quantity.sort_values(by=["Total"], axis=0, ascending=False)
-        history_df_total = history_df_total.sort_values(by=["Total"], axis=0, ascending=False)
+        history_df_quantity = history_df_quantity.sort_values(
+            by=["Total"], axis=0, ascending=False
+        )
+        history_df_total = history_df_total.sort_values(
+            by=["Total"], axis=0, ascending=False
+        )
 
-        history_df_quantity = history_df_quantity.applymap(lambda x: round(x, 2))
+        history_df_quantity = history_df_quantity.applymap(
+            lambda x: round(x, 2)
+        )
         history_df_total = history_df_total.applymap(lambda x: round(x, 2))
         return history_df_quantity, history_df_total
 
-    def check_invoices_integrity(self, in_date: datetime, end_date: datetime) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        """Check integrity of invoices exported to siigo.
-        """
+    def check_invoices_integrity(
+        self, in_date: datetime, end_date: datetime
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Check integrity of invoices exported to siigo."""
         (
             successful_pirpos,
             pirpos_invoices_per_client,
