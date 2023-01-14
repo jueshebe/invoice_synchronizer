@@ -3,20 +3,28 @@ from typing import List, Tuple
 import os
 import json
 from datetime import datetime, timedelta
+import logging
+from logging import Logger
 import requests
-from pirpos2siigo.models import Client, DocumentType, Product, Invoice, TaxInfo
+from pirpos2siigo.models import (
+    Client,
+    DocumentType,
+    Product,
+    Invoice,
+    TaxInfo,
+    Pirpos2SiigoMap,
+)
 from pirpos2siigo.clients.utils import (
     load_pirpos2siigo_config,
     create_client,
     create_invoice,
-    get_missing_outdated_clients,
     ErrorSiigoToken,
     ErrorLoadingSiigoClients,
     ErrorLoadingSiigoProducts,
     ErrorLoadingSiigoInvoices,
     ErrorCreatingSiigoClient,
-    ErrorUpdatingSiigoClient
-
+    ErrorUpdatingSiigoClient,
+    ErrorCreatingSiigoProduct,
 )
 
 
@@ -28,17 +36,20 @@ class SiigoConnector:
         siigo_username: str = os.environ["SIIGO_USER_NAME"],
         siigo_access_key: str = os.environ["SIIGO_ACCESS_KEY"],
         configuration_path: str = "configuration.JSON",
+        logger: Logger = logging.getLogger(),
     ):
         """Parameters used to make a connection."""
         # Siigo API info
+        self.__logger = logger
         self.__siigo_username = siigo_username
         self.__siigo_access_key = siigo_access_key
         self.__configuration = load_pirpos2siigo_config(configuration_path)
         self.__siigo_access_token = self.__get_siigo_access_token()
         self.__products: List[Product]
         self.__clients: List[Client]
-        self.get_siigo_clients()
-        self.get_siigo_products()
+        # self.get_siigo_clients()
+        # self.get_siigo_products()
+        logger.info("Siigo connector initialized.")
 
     def __get_siigo_access_token(self) -> str:
         """Obtiene el token de acceso para usar la API de SIIGO.
@@ -59,7 +70,7 @@ class SiigoConnector:
             "username": self.__siigo_username,
             "access_key": self.__siigo_access_key,
         }
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json; charset=UTF-8"}
         response = requests.post(url, data=json.dumps(values), headers=headers)
 
         if not response.ok:
@@ -100,7 +111,7 @@ class SiigoConnector:
             "authority": "services.siigo.com",
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
-            "content-type": "application/json",
+            "content-type": "application/json; charset=UTF-8",
         }
         page = 1
         clients: List[Client] = []
@@ -130,11 +141,15 @@ class SiigoConnector:
                 else:
                     contacts = {}
 
+                name = " ".join(client_data["name"])
+                # if "gral s.a.s" in name:
+                #     xas = 1
+
                 client = create_client(
                     configuration_file=self.__configuration,
                     siigo_id=client_data["id"],
                     pirpos_id=None,
-                    name=" ".join(client_data["name"]),
+                    name=name,
                     email=contacts.get("email"),
                     phone=contacts.get("phone", {}).get("number"),
                     address=client_data.get("address", {}).get("address"),
@@ -182,7 +197,7 @@ class SiigoConnector:
             "authority": "services.siigo.com",
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
-            "content-type": "application/json",
+            "content-type": "application/json; charset=UTF-8",
         }
 
         page = 0
@@ -235,6 +250,7 @@ class SiigoConnector:
 
                 products.append(
                     Product(
+                        siigo_id=product_info["ProductGUID"],
                         product_id=product_info["Code"],
                         name=product_info["Description"],
                         price=product_info["Precio de venta 1"]
@@ -271,7 +287,7 @@ class SiigoConnector:
         payload = ""
         headers = {
             "Authorization": self.__siigo_access_token,
-            "Content-Type": "application/json",
+            "Content-Type": "application/json; charset=UTF-8",
         }
 
         page = 1
@@ -362,197 +378,294 @@ class SiigoConnector:
 
         return invoices
 
-    def create_clients(self, clients: List[Client]) -> None:
-        """Create list of clients.
+    def create_client(self, client: Client) -> None:
+        """Create client.
 
         Parameters
         ----------
-        clients : List[Client]
-            list of clients to be created
+        client : Client
+           client to be created
         """
         url = "https://api.siigo.com/v1/customers"
         headers = {
             "authorization": self.__siigo_access_token,
-            "content-type": "application/json",
+            "content-type": "application/json; charset=UTF-8",
         }
 
-        for client in clients:
-            full_name = client.name.split(" ")
-            name, last_name = [full_name[0], " ".join(full_name[1:])]
-            if client.document_type == DocumentType.NIT:
-                person_type = "Company"
-                client_name = [client.name]
-            else:
-                person_type = "Person"
-                client_name = [name, last_name]
+        full_name = client.name.split(" ")
+        name, last_name = [full_name[0], " ".join(full_name[1:])]
+        last_name = last_name if len(last_name) > 0 else name
+        last_name = last_name[0:50]
+        if client.document_type == DocumentType.NIT:
+            person_type = "Company"
+            client_name = [client.name]
+        else:
+            person_type = "Person"
+            client_name = [name, last_name]
+        state_code = str(client.city_detail.state_code)
+        state_code = state_code if len(state_code) > 1 else f"0{state_code}"
 
-            payload = {
-                "type": "Customer",
-                "person_type": person_type,
-                "id_type": str(client.document_type.value),
-                "identification": str(client.document),
-                "check_digit": str(client.check_digit),
-                "name": client_name,
-                "commercial_name": "",
-                "branch_office": 0,
-                "active": "true",
-                "vat_responsible": "false",
-                "fiscal_responsibilities": [{"code": client.responsibilities.value}],
-                "address": {
-                    "address": client.address,
-                    "city": {
-                        "country_code": str(client.city_detail.country_code),
-                        "state_code": str(client.city_detail.state_code),
-                        "city_code": str(client.city_detail.city_code),
-                    },
-                    "postal_code": "",
+        payload = {
+            "type": "Customer",
+            "person_type": person_type,
+            "id_type": str(client.document_type.value),
+            "identification": str(client.document),
+            "check_digit": str(client.check_digit),
+            "name": client_name,
+            "commercial_name": "",
+            "branch_office": 0,
+            "active": "true",
+            "vat_responsible": "false",
+            "fiscal_responsibilities": [
+                {"code": client.responsibilities.value}
+            ],
+            "address": {
+                "address": client.address,
+                "city": {
+                    "country_code": str(client.city_detail.country_code),
+                    "state_code": state_code,
+                    "city_code": str(client.city_detail.city_code),
                 },
-                "phones": [
-                    {
+                "postal_code": "",
+            },
+            "phones": [
+                {
+                    "indicative": "",
+                    "number": client.phone[0:10],
+                    "extension": "",
+                }
+            ],
+            "contacts": [
+                {
+                    "first_name": name,
+                    "last_name": last_name,
+                    "email": client.email,
+                    "phone": {
                         "indicative": "",
-                        "number": client.phone,
+                        "number": client.phone[0:10],
                         "extension": "",
-                    }
-                ],
-                "contacts": [
-                    {
-                        "first_name": name,
-                        "last_name": last_name,
-                        "email": client.email,
-                        "phone": {
-                            "indicative": "",
-                            "number": client.phone,
-                            "extension": "",
-                        },
-                    }
-                ],
-                "comments": "Created from Pirpos2Siigo software",
-                # "related_users": {"seller_id": 629, "collector_id": 629},
-            }
+                    },
+                }
+            ],
+            "comments": "Created from Pirpos2Siigo software",
+            # "related_users": {"seller_id": 629, "collector_id": 629},
+        }
 
-            response = requests.request(
-                "POST",
-                url,
-                headers=headers,
-                data=str(payload),
+        response = requests.request(
+            "POST",
+            url,
+            headers=headers,
+            data=str(payload),
+        )
+        if not response.ok:
+            raise ErrorCreatingSiigoClient(
+                f"Can't create clients\n {response.text}"
             )
-            if not response.ok:
-                raise ErrorCreatingSiigoClient(
-                    f"Can't download Siigo clients\n {response.text}"
-                )
 
-    def _update_clients(self, clients: List[Client]) -> None:
-        """Update list of clients.
+    def update_client(self, client: Client) -> None:
+        """Update client.
 
         Parameters
         ----------
-        clients : List[Client]
-            list of clients to be updated
+        client : Client
+            client to be updated
         """
         url = "https://api.siigo.com/v1/customers/{siigo_id}"
         headers = {
             "authorization": self.__siigo_access_token,
-            "content-type": "application/json",
+            "content-type": "application/json; charset=UTF-8",
         }
 
-        for client in clients:
-            full_name = client.name.split(" ")
-            name, last_name = [full_name[0], " ".join(full_name[1:])]
-            if client.document_type == DocumentType.NIT:
-                person_type = "Company"
-                client_name = [client.name]
-            else:
-                person_type = "Person"
-                client_name = [name, last_name]
+        full_name = client.name.split(" ")
+        name, last_name = [full_name[0], " ".join(full_name[1:])]
+        last_name = last_name if len(last_name) > 0 else "."
+        last_name = last_name[0:50]
+        if client.document_type == DocumentType.NIT:
+            person_type = "Company"
+            client_name = [client.name]
+        else:
+            person_type = "Person"
+            client_name = [name, last_name]
 
-            client_url = url.format(siigo_id=client.siigo_id)
-            payload = {
-                "type": "Customer",
-                "person_type": person_type,
-                "id_type": str(client.document_type.value),
-                "identification": str(client.document),
-                "check_digit": str(client.check_digit),
-                "name": client_name,
-                "commercial_name": "",
-                "branch_office": 0,
-                "active": "true",
-                "vat_responsible": "false",
-                "fiscal_responsibilities": [{"code": client.responsibilities.value}],
-                "address": {
-                    "address": client.address,
-                    "city": {
-                        "country_code": str(client.city_detail.country_code),
-                        "state_code": str(client.city_detail.state_code),
-                        "city_code": str(client.city_detail.city_code),
-                    },
-                    "postal_code": "",
+        client_url = url.format(siigo_id=client.siigo_id)
+        payload = {
+            "type": "Customer",
+            "person_type": person_type,
+            "id_type": str(client.document_type.value),
+            "identification": str(client.document),
+            "check_digit": str(client.check_digit),
+            "name": client_name,
+            "commercial_name": "",
+            "branch_office": 0,
+            "active": "true",
+            "vat_responsible": "false",
+            "fiscal_responsibilities": [
+                {"code": client.responsibilities.value}
+            ],
+            "address": {
+                "address": client.address,
+                "city": {
+                    "country_code": str(client.city_detail.country_code),
+                    "state_code": str(client.city_detail.state_code),
+                    "city_code": str(client.city_detail.city_code),
                 },
-                "phones": [
-                    {
+                "postal_code": "",
+            },
+            "phones": [
+                {
+                    "indicative": "",
+                    "number": client.phone[0:10],
+                    "extension": "",
+                }
+            ],
+            "contacts": [
+                {
+                    "first_name": name,
+                    "last_name": last_name,
+                    "email": client.email,
+                    "phone": {
                         "indicative": "",
-                        "number": client.phone,
+                        "number": client.phone[0:10],
                         "extension": "",
-                    }
-                ],
-                "contacts": [
-                    {
-                        "first_name": name,
-                        "last_name": last_name,
-                        "email": client.email,
-                        "phone": {
-                            "indicative": "",
-                            "number": client.phone,
-                            "extension": "",
-                        },
-                    }
-                ],
-                "comments": "Created from Pirpos2Siigo software",
-                # "related_users": {"seller_id": 629, "collector_id": 629},
-            }
+                    },
+                }
+            ],
+            "comments": "Created from Pirpos2Siigo software",
+            # "related_users": {"seller_id": 629, "collector_id": 629},
+        }
 
-            response = requests.request(
-                "PUT",
-                client_url,
-                headers=headers,
-                data=str(payload),
+        response = requests.request(
+            "PUT",
+            client_url,
+            headers=headers,
+            data=str(payload),
+        )
+        if not response.ok:
+            raise ErrorUpdatingSiigoClient(
+                f"Can't update Siigo clients\n {response.text}"
             )
-            if not response.ok:
-                raise ErrorUpdatingSiigoClient(
-                    f"Can't download Siigo clients\n {response.text}"
-                )
-    def update_clients(
-        self, clients: List[Client], must_download: bool = False
-    ) -> None:
-        """Update and create client on siigo.
 
-        Errors will be saved on ./errors/errors_clients.json
+    def create_product(self, product: Product) -> None:
+        """Create product.
 
         Parameters
         ----------
-        clients : List[Client]
-            List of outdated clients
-        must_download: bool
-            download siigo clients
+        products : Product
+            product to be created
         """
-        errors_backup = {}
-        errors = False
-        error_count = 0
+        url = "https://api.siigo.com/v1/products"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+        }
+        if len(product.taxes) > 0:
+            tax = [{"id": product.taxes[0].siigo_id}]
+        else:
+            tax = []
 
-        # get actual siigo clients
-        if must_download:
-            self.get_siigo_clients()
+        if product.price > 0:
+            prices = [
+                {
+                    "currency_code": "COP",
+                    "price_list": [
+                        {
+                            "position": 1,
+                            "value": product.price if product.price > 0 else 1,
+                        }
+                    ],
+                }
+            ]
+        else:
+            prices = []
 
-        # get missing and ourdated clients
-        missing_clients, outdated_clients = get_missing_outdated_clients(
-            clients, self.clients
+        payload = {
+            "code": product.product_id,
+            "name": product.name,
+            "account_group": 673,
+            "type": "Product",
+            "stock_control": "false",
+            "active": "true",
+            "tax_classification": "Taxed",
+            "tax_included": "true",
+            "tax_consumption_value": 0,
+            "taxes": tax,
+            "prices": prices,
+            "unit": "94",
+            "unit_label": "unidad",
+            "reference": "REF1",
+            "description": ".",
+        }
+        response = requests.request(
+            "POST",
+            url,
+            headers=headers,
+            data=str(payload),
         )
+        if not response.ok:
+            raise ErrorCreatingSiigoProduct(
+                f"Can't create product\n {response.text}"
+            )
 
-        if len(missing_clients) > 0:
-            self.create_clients(missing_clients)
+    def update_product(self, product: Product) -> None:
+        """Update product.
 
-        if len(outdated_clients) > 0:
-            self._update_clients(outdated_clients)
+        Parameters
+        ----------
+        products : Product
+            product to be updated
+        """
+        url = f"https://api.siigo.com/v1/products/{product.siigo_id}"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+        }
+        if len(product.taxes) > 0:
+            tax = [{"id": product.taxes[0].siigo_id}]
+        else:
+            tax = []
 
+        if product.price > 0:
+            prices = [
+                {
+                    "currency_code": "COP",
+                    "price_list": [
+                        {
+                            "position": 1,
+                            "value": product.price if product.price > 0 else 1,
+                        }
+                    ],
+                }
+            ]
+        else:
+            prices = []
+
+        payload = {
+            "code": product.product_id,
+            "name": product.name,
+            "account_group": 673,
+            "type": "Product",
+            "stock_control": "false",
+            "active": "true",
+            "tax_classification": "Taxed",
+            "tax_included": "true",
+            "tax_consumption_value": 0,
+            "taxes": tax,
+            "prices": prices,
+            "unit": "94",
+            "unit_label": "unidad",
+            "reference": "REF1",
+            "description": ".",
+        }
+        response = requests.request(
+            "PUT",
+            url,
+            headers=headers,
+            data=str(payload),
+        )
+        if not response.ok:
+            raise ErrorCreatingSiigoProduct(
+                f"Can't update product\n {response.text}"
+            )
 
     @property
     def clients(self) -> List[Client]:
@@ -563,6 +676,11 @@ class SiigoConnector:
     def products(self) -> List[Product]:
         """Products property."""
         return self.__products
+
+    @property
+    def configuration(self) -> Pirpos2SiigoMap:
+        """Products property."""
+        return self.__configuration
 
 
 if __name__ == "__main__":
@@ -581,11 +699,17 @@ if __name__ == "__main__":
     # date_2 = datetime(2022, 9, 2)
     # list_invoices = connector.get_siigo_invoices(date_1, date_2, 100)
 
-    test_client_json = connector.clients[0].json()
-    test_client = Client(**json.loads(test_client_json))
-    test_client.name = "Julian test2"
-    test_client.document = 1121923076
+    # test_client_json = connector.clients[0].json()
+    # test_client = Client(**json.loads(test_client_json))
+    # test_client.name = "Julian test2"
+    # test_client.document = 1121923076
     # connector.create_clients([test_client])
     # connector._update_clients([test_client])
-    connector.update_clients([test_client])
+    # connector.update_clients([test_client])
+    connector.get_siigo_products()
+    product = connector.products[0]
+    product.name = product.name.upper()
+    # product.product_id = "ggg"
+    # connector.create_product(product)
+    connector.update_product(product)
     pass

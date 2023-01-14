@@ -240,67 +240,6 @@ def create_invoice(
     )
 
 
-def get_missing_outdated_clients(
-    ref_clients: List[Client], unchecked_clients: List[Client]
-) -> Tuple[List[Client], List[Client]]:
-    """Divide unchecked_clients in missing_clients and outdated_clients.
-
-    Parameters
-    ----------
-    ref_clients : List[Client]
-        Reference used as updated clients
-    unchecked_clients : List[Client]
-        Unchecked clients
-
-    Returns
-    -------
-    Tuple[List[Client], List[Client]]
-    """
-    unchecked_documents = [client.document for client in unchecked_clients]
-
-    missing_clients = [
-        client
-        for client in ref_clients
-        if int(client.document) not in unchecked_documents
-    ]
-
-    present_ref_clients: List[Client] = [
-        client
-        for client in ref_clients
-        if client.document in unchecked_documents
-    ]
-
-    outdated_clients: List[Client] = []
-    for ref_client in present_ref_clients:
-
-        def filter_outdated_clients(client: Client) -> bool:
-            """Get outdated_clients."""
-            return client.document == ref_client.document
-
-        unchecked_client: Client = list(
-            filter(filter_outdated_clients, unchecked_clients)
-        )[
-            0
-        ]  # TODO: is supposed Siigo does not repear docuemnt clients
-
-        if (
-            unchecked_client.name != ref_client.name
-            or unchecked_client.email != ref_client.email
-            or unchecked_client.phone != ref_client.phone
-            or unchecked_client.address != ref_client.address
-            or unchecked_client.check_digit != ref_client.check_digit
-            or unchecked_client.document_type.value != ref_client.document_type.value
-            or unchecked_client.responsibilities.value != ref_client.responsibilities.value
-            or unchecked_client.city_detail.city_name != ref_client.city_detail.city_name
-            or unchecked_client.city_detail.city_state != ref_client.city_detail.city_state
-            or unchecked_client.city_detail.city_code != ref_client.city_detail.city_code
-            or unchecked_client.city_detail.country_code != ref_client.city_detail.country_code
-        ):
-            outdated_clients.append(ref_client)
-
-    return (missing_clients, outdated_clients)
-
-
 class ErrorConfigPirposSiigo(Exception):
     """File provided doesn't have correct information."""
 
@@ -336,8 +275,14 @@ class ErrorLoadingSiigoProducts(Exception):
 class ErrorLoadingSiigoInvoices(Exception):
     """Can't download Siigo Invoices."""
 
+
 class ErrorCreatingSiigoClient(Exception):
     """Can't create client."""
 
+
 class ErrorUpdatingSiigoClient(Exception):
     """Can't create client."""
+
+
+class ErrorCreatingSiigoProduct(Exception):
+    """Can't create product."""

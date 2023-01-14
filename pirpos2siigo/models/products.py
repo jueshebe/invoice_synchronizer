@@ -1,6 +1,5 @@
 """Model for products."""
-from enum import Enum
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -16,6 +15,7 @@ class TaxInfo(BaseModel):
 class Product(BaseModel):
     """Product info."""
 
+    siigo_id: Optional[str]
     product_id: str
     name: str
     price: float

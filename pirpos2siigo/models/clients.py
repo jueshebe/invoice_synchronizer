@@ -2,16 +2,16 @@
 from enum import Enum
 from typing import Optional, Union
 from pydantic import BaseModel, validator
-
+from pirpos2siigo.models.utils import normalize
 
 class CityDetail(BaseModel):
     """City info."""
 
     city_name: str
     city_state: str
-    city_code: int
+    city_code: str
     country_code: str  # TODO: Must be Enum
-    state_code: int
+    state_code: str
 
 
 class Responsibilities(Enum):
@@ -55,6 +55,18 @@ class Client(BaseModel):
     document_type: DocumentType
     responsibilities: Responsibilities
     city_detail: CityDetail
+
+    @validator("name")
+    @classmethod
+    def clean_name(cls, name: str) -> str:
+        """Remove upercase and accents."""
+        return normalize(name)
+
+    @validator("address")
+    @classmethod
+    def clean_address(cls, address: str) -> str:
+        """Remove upercase and accents."""
+        return normalize(address)
 
     @validator("phone")
     @classmethod

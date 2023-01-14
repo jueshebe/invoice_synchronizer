@@ -2,6 +2,8 @@
 from typing import List, Tuple
 import os
 import json
+from logging import Logger
+import logging
 import time
 from datetime import datetime, timedelta
 import requests
@@ -26,16 +28,20 @@ class PirposConnector:
         pirpos_username: str,
         pirpos_password: str,
         configuration_path: str,
+        logger: Logger = logging.getLogger()
     ):
         """Parameters used to make a connection."""
+        self.__logger = logger
         self.__pirpos_username = pirpos_username
         self.__pirpos_password = pirpos_password
         self.__configuration = load_pirpos2siigo_config(configuration_path)
         self.__pirpos_access_token = self.__get_pirpos_access_token()
         self.__products: List[Product]
         self.__clients: List[Client]
-        self.get_pirpos_clients()
-        self.get_pirpos_products()
+        # self.get_pirpos_clients()
+        # self.get_pirpos_products()
+        
+        self.__logger.info("Pirpos connector initialized.")
 
     def __get_pirpos_access_token(self) -> str:
         """Get pirpos access token to comunicate with the server.
@@ -71,6 +77,7 @@ class PirposConnector:
             raise ErrorPirposToken(
                 "tokenCurrent key is not present in the respose"
             )
+
         return access_token
 
     def get_pirpos_clients(self, batch_clients: int = 200) -> None:
@@ -87,6 +94,7 @@ class PirposConnector:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
+
         while True:
             url = (
                 "https://api.pirpos.com/clients?pagination=true"
@@ -105,10 +113,12 @@ class PirposConnector:
             if len(data) == 0:
                 break
 
+
             for client_data in data:
+                name = client_data["name"]
                 client = create_client(
                     configuration_file=self.__configuration,
-                    name=client_data["name"],
+                    name=name,
                     siigo_id=None,
                     pirpos_id=client_data.get("_id"),
                     email=client_data.get("email"),
@@ -132,6 +142,7 @@ class PirposConnector:
                 )
                 clients.append(client)
             page += 1
+
 
         self.__clients = clients
 
@@ -203,6 +214,16 @@ class PirposConnector:
         List[Invoice]
             Pirpos invoices per client in a range of time
         """
+        try:
+            self.clients
+        except:
+            self.get_pirpos_clients()
+
+        try:
+            self.products
+        except:
+            self.get_pirpos_products()
+
         end_day += timedelta(days=1)
         if init_day > end_day:
             raise ErrorLoadingPirposInvoices(
@@ -342,7 +363,8 @@ if __name__ == "__main__":
     assert isinstance(user_name, str)
     assert isinstance(user_password, str)
     time_1 = time.time()
-    connector = PirposConnector(user_name, user_password, PATH)
+    connector = PirposConnector(user_name, user_password, PATH, logging.getLogger())
+    connector.get_pirpos_products()
     print(time.time() - time_1)
     date_1 = datetime(2022, 11, 2)
     date_2 = datetime(2022, 11, 2)
