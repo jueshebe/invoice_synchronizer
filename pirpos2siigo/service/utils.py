@@ -2,7 +2,7 @@
 from typing import List, Tuple, Dict, Any
 from os import path
 import json
-from pirpos2siigo.models import Client, Product
+from pirpos2siigo.models import Client, Product, Invoice
 
 
 def get_missing_outdated_clients(
@@ -118,6 +118,62 @@ def get_missing_outdated_products(
                 break
 
     return (missing_products, outdated_products)
+
+
+def get_missing_outdated_invoices(
+    ref_invoices: List[Invoice],
+    unchecked_invoices: List[Invoice],
+) -> Tuple[List[Invoice], List[Tuple[Invoice, Dict[str, Any]]]]:
+    """Divide unchecked_invoices in missing_invoices and outdated_invoices."""
+    unchecked_numbers: List[str] = [
+        f"{invoice.invoice_prefix}{invoice.invoice_number}"
+        for invoice in unchecked_invoices
+    ]
+
+    missing_invoices = [
+        invoice
+        for invoice in ref_invoices
+        if f"{invoice.invoice_prefix}{invoice.invoice_number}"
+        not in unchecked_numbers
+    ]
+
+    present_ref_invoices: List[Invoice] = [
+        invoice
+        for invoice in ref_invoices
+        if f"{invoice.invoice_prefix}{invoice.invoice_number}"
+        in unchecked_numbers
+    ]
+
+    outdated_invoices: List[Tuple[Invoice, Dict[str, Any]]] = []
+    for ref_invoice in present_ref_invoices:
+
+        def filter_outdated_invoice(invoice: Invoice) -> bool:
+            """Get outdated_invoices."""
+            return (
+                invoice.invoice_prefix == ref_invoice.invoice_prefix
+                and invoice.invoice_number == ref_invoice.invoice_number
+            )
+
+        unchecked_invoice: Invoice = list(
+            filter(filter_outdated_invoice, unchecked_invoices)
+        )[
+            0
+        ]  # TODO: is supposed Siigo does not repear docuemnt clients
+
+        unchecked_dict = unchecked_invoice.dict()
+        ref_dict = ref_invoice.dict()
+        for key in ref_dict:
+            if (
+                key not in ["siigo_id", "product_id"]
+                and unchecked_dict[key] != ref_dict[key]
+            ):
+
+                ref_invoice.siigo_id = unchecked_invoice.siigo_id
+                difference = {key: unchecked_dict[key]}
+                outdated_invoices.append((ref_invoice, difference))
+                break
+
+    return (missing_invoices, outdated_invoices)
 
 
 def save_error(error_data: Dict[str, str], file_name: str) -> None:

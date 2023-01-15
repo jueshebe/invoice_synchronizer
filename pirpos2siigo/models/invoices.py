@@ -44,6 +44,7 @@ class Prefix(BaseModel):
 class Invoice(BaseModel):
     """Invoice model."""
 
+    siigo_id: Optional[str]
     cachier: Employee
     seller: Employee
     client: Client
