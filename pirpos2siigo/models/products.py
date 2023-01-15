@@ -1,7 +1,7 @@
 """Model for products."""
 from typing import List, Optional
-from pydantic import BaseModel
-
+from pydantic import BaseModel, validator
+from pirpos2siigo.models.utils import normalize
 
 class TaxInfo(BaseModel):
     """Stock information."""
@@ -20,3 +20,9 @@ class Product(BaseModel):
     name: str
     price: float
     taxes: List[TaxInfo]
+
+    @validator("name")
+    @classmethod
+    def clean_name(cls, name: str) -> str:
+        """Remove upercase and accents."""
+        return normalize(name)

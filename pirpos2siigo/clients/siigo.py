@@ -707,8 +707,8 @@ if __name__ == "__main__":
     # connector._update_clients([test_client])
     # connector.update_clients([test_client])
     connector.get_siigo_products()
-    product = connector.products[0]
-    product.name = product.name.upper()
+    product_test = connector.products[0]
+    product_test.name = product_test.name.upper()
     # product.product_id = "ggg"
     # connector.create_product(product)
     connector.update_product(product)

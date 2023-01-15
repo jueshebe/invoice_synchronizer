@@ -2,7 +2,7 @@
 from typing import List, Tuple, Dict, Any
 from os import path
 import json
-from pirpos2siigo.models import Client
+from pirpos2siigo.models import Client, Product
 
 
 def get_missing_outdated_clients(
@@ -59,8 +59,8 @@ def get_missing_outdated_clients(
                 and unchecked_dict[key] != ref_dict[key]
             ):
                 if key == "name":
-                    name1 = unchecked_client.name.replace(" ","")
-                    name2 = ref_client.name.replace(" ","")
+                    name1 = unchecked_client.name.replace(" ", "")
+                    name2 = ref_client.name.replace(" ", "")
                     if name1 == name2:
                         continue
 
@@ -70,6 +70,54 @@ def get_missing_outdated_clients(
                 break
 
     return (missing_clients, outdated_clients)
+
+
+def get_missing_outdated_products(
+    ref_products: List[Product],
+    unchecked_products: List[Product],
+) -> Tuple[List[Product], List[Tuple[Product, Dict[str, Any]]]]:
+    """Divide unchecked_clients in missing_clients and outdated_clients."""
+    unchecked_id = [product.product_id for product in unchecked_products]
+
+    missing_products = [
+        product
+        for product in ref_products
+        if product.product_id not in unchecked_id
+    ]
+
+    present_ref_products: List[Product] = [
+        product
+        for product in ref_products
+        if product.product_id in unchecked_id
+    ]
+
+    outdated_products: List[Tuple[Product, Dict[str, Any]]] = []
+    for ref_product in present_ref_products:
+
+        def filter_outdated_product(product: Product) -> bool:
+            """Get outdated_products."""
+            return product.product_id == ref_product.product_id
+
+        unchecked_product: Product = list(
+            filter(filter_outdated_product, unchecked_products)
+        )[
+            0
+        ]  # TODO: is supposed Siigo does not repear docuemnt clients
+
+        unchecked_dict = unchecked_product.dict()
+        ref_dict = ref_product.dict()
+        for key in ref_dict:
+            if (
+                key not in ["siigo_id", "product_id"]
+                and unchecked_dict[key] != ref_dict[key]
+            ):
+
+                ref_product.siigo_id = unchecked_product.siigo_id
+                difference = {key: unchecked_dict[key]}
+                outdated_products.append((ref_product, difference))
+                break
+
+    return (missing_products, outdated_products)
 
 
 def save_error(error_data: Dict[str, str], file_name: str) -> None:

@@ -37,3 +37,4 @@ siigo_connector = SiigoConnector(
 updater = Updater(pirpos_connector, siigo_connector, logger)
 if __name__ == "__main__":
     updater.update_clients()
+    updater.update_products()
