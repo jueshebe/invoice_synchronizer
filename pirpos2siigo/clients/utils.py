@@ -281,8 +281,17 @@ class ErrorCreatingSiigoClient(Exception):
 
 
 class ErrorUpdatingSiigoClient(Exception):
-    """Can't create client."""
+    """Can't update client."""
 
 
 class ErrorCreatingSiigoProduct(Exception):
     """Can't create product."""
+
+class ErrorUpdatingSiigoProduct(Exception):
+    """Can't update product."""
+
+class ErrorCreatingSiigoInvoice(Exception):
+    """Can't create invoice."""
+
+class ErrorUpdatingSiigoInvoice(Exception):
+    """Can't update invoice."""
