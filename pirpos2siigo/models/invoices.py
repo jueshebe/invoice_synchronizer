@@ -10,7 +10,7 @@ class Employee(BaseModel):
     """Cachier model."""
 
     name: str
-    employee_id: str
+    employee_id: str  # TODO: add employee mapping
 
 
 class InvoiceProduct(BaseModel):
@@ -24,6 +24,7 @@ class InvoiceProduct(BaseModel):
     price: float
     quantity: int
     tax: TaxInfo
+
 
 class Payment(BaseModel):
     """Payment model."""

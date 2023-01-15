@@ -4,6 +4,7 @@ __version__ = "0.1.2"
 import sys
 import os
 import logging
+from datetime import datetime
 from pirpos2siigo.clients import PirposConnector, SiigoConnector
 from pirpos2siigo.service import Updater
 
@@ -21,10 +22,10 @@ consoleHandler.setFormatter(logStreamFormatter)
 consoleHandler.setLevel(level=logging.DEBUG)
 logger.addHandler(consoleHandler)
 
-siigo_user_name = os.getenv("SIIGO_USER_NAME")
-siigo_user_password = os.getenv("SIIGO_ACCESS_KEY")
-pirpos_user_name = os.getenv("PIRPOS_USER_NAME")
-pirpos_user_password = os.getenv("PIRPOS_PASSWORD")
+siigo_user_name = str(os.getenv("SIIGO_USER_NAME"))
+siigo_user_password = str(os.getenv("SIIGO_ACCESS_KEY"))
+pirpos_user_name = str(os.getenv("PIRPOS_USER_NAME"))
+pirpos_user_password = str(os.getenv("PIRPOS_PASSWORD"))
 CONFIGURATION_PATH = (
     "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
 )
@@ -36,5 +37,9 @@ siigo_connector = SiigoConnector(
 )
 updater = Updater(pirpos_connector, siigo_connector, logger)
 if __name__ == "__main__":
-    updater.update_clients()
-    updater.update_products()
+    # updater.update_clients()
+    # updater.update_products()
+    date_1 = datetime(2022, 11, 1)
+    date_2 = datetime(2022, 11, 1)
+    invoices = pirpos_connector.get_pirpos_invoices_per_client(date_1, date_2)
+    siigo_connector.create_invoice(invoices[0])

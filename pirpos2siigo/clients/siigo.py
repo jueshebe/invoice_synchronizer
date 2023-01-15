@@ -1,6 +1,7 @@
 """Siigo client."""
 from typing import List, Tuple
 import os
+import time
 import json
 from datetime import datetime, timedelta
 import logging
@@ -642,6 +643,166 @@ class SiigoConnector:
         payload = {
             "code": product.product_id,
             "name": product.name,
+            "account_group": 673,
+            "type": "Product",
+            "stock_control": "false",
+            "active": "true",
+            "tax_classification": "Taxed",
+            "tax_included": "true",
+            "tax_consumption_value": 0,
+            "taxes": tax,
+            "prices": prices,
+            "unit": "94",
+            "unit_label": "unidad",
+            "reference": "REF1",
+            "description": ".",
+        }
+        response = requests.request(
+            "PUT",
+            url,
+            headers=headers,
+            data=str(payload),
+        )
+        if not response.ok:
+            raise ErrorCreatingSiigoProduct(
+                f"Can't update product\n {response.text}"
+            )
+
+    def create_invoice(self, invoice: Invoice) -> None:
+        """Create invoice."""
+        url = "https://api.siigo.com/v1/invoices"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+        }
+
+        payload = {
+            "document": {"id": invoice.invoice_prefix.siigo_id},
+            "number": invoice.invoice_number,
+            "date": invoice.created_on.strftime("%Y-%m-%d"),
+            "customer": {
+                "identification": str(invoice.client.document),
+                "branch_office": 0,
+            },
+            "seller": 709,  # TODO: Employee mapping
+            "observations": "invoice created from pirpos2siigo software",
+            "items": [
+                {
+                    "code": invoice_product.product.product_id,
+                    "description": invoice_product.product.name,
+                    "quantity": invoice_product.quantity,
+                    "price": round(
+                        invoice_product.price / (1 + invoice_product.tax.value),
+                        2,
+                    ),
+                    "discount": 0,
+                    "taxes": [{"id": invoice_product.tax.siigo_id}],
+                }
+                for invoice_product in invoice.products
+            ],
+            "payments": [
+                {
+                    "id": pay_method[0].siigo_id,
+                    "value": pay_method[1],
+                    "due_date": invoice.created_on.strftime("%Y-%m-%d"),
+                }
+                for pay_method in invoice.payment_method
+            ],
+            "retentions": [
+                {"id": retention.siigo_id}
+                for retention in self.__configuration.retentions
+            ],
+        }
+
+        for retries in range(30):
+            response = requests.request(
+                "POST",
+                url,
+                headers=headers,
+                data=str(payload),
+            )
+            if not response.ok:
+                if response.json()["Errors"][0]["Code"] == "already_exists":
+                    return
+
+                elif (
+                    response.json()["Errors"][0]["Code"]
+                    == "duplicated_document"
+                ):
+                    # para relizar otra peticion y ayudar al sistema
+                    # self.enviarFacturaPrueba()
+                    self.__logger.info("duplicated_document error. try to send it again")
+                    time.sleep(2)
+                    if retries < 0:
+                        continue
+
+                    self.__logger.info(response.text)
+                    info = str(response.json()["Errors"])
+                    raise SystemError(info)
+
+                elif (
+                    response.json()["Errors"][0]["Code"]
+                    == "invalid_total_payments"
+                ):
+                    # el mensaje indica el valor que debe ser pagado
+                    text = response.json()["Errors"][0]["Message"]
+                    print(text)
+                    pyment = [int(s) for s in re.findall(r"\b\d+\b", text)][0]
+                    print(
+                        "Se ajusta el valor a pagar de {0} a {1}".format(
+                            body["payments"][0]["value"], pyment
+                        )
+                    )
+                    body[
+                        "payments"
+                    ] = [  # este ajuste elimina otros metedos de pago asociados !!cuidado!!
+                        {
+                            "id": body["payments"][0]["id"],
+                            "value": pyment,
+                        }
+                    ]
+                    continue
+
+                raise ErrorCreatingSiigoProduct(
+                    f"Can't create product\n {response.text}"
+                )
+
+    def update_invoice(self, invoice: Invoice) -> None:
+        """Update product.
+
+        Parameters
+        ----------
+        products : Product
+            product to be updated
+        """
+        url = f"https://api.siigo.com/v1/products/{invoice.siigo_id}"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+        }
+        if len(invoice.taxes) > 0:
+            tax = [{"id": invoice.taxes[0].siigo_id}]
+        else:
+            tax = []
+
+        if invoice.price > 0:
+            prices = [
+                {
+                    "currency_code": "COP",
+                    "price_list": [
+                        {
+                            "position": 1,
+                            "value": invoice.price if invoice.price > 0 else 1,
+                        }
+                    ],
+                }
+            ]
+        else:
+            prices = []
+
+        payload = {
+            "code": invoice.product_id,
+            "name": invoice.name,
             "account_group": 673,
             "type": "Product",
             "stock_control": "false",
