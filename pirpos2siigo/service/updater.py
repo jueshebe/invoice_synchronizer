@@ -8,6 +8,7 @@ from pirpos2siigo.service.utils import (
     get_missing_outdated_clients,
     save_error,
     get_missing_outdated_products,
+    get_missing_outdated_invoices,
 )
 
 
@@ -133,13 +134,16 @@ class Updater:
     def update_invoices(self, init_date: datetime, end_day: datetime) -> None:
         """Update and create invoices on siigo from pirpos data."""
         self.logger.info("Updating invoices")
-        self.pirpos_client.get_pirpos_invoices_per_client(init_date, end_day)
-        self.siigo_client.get_siigo_invoices(init_date, end_day)
+        ref_invoices = self.pirpos_client.get_pirpos_invoices_per_client(
+            init_date, end_day
+        )
+        unchecked_invoices = self.siigo_client.get_siigo_invoices(
+            init_date, end_day
+        )
 
         # get missing and ourdated clients
-        missing_invoices, outdated_invoices = get_missing_outdated_products(
-            self.pirpos_client.products,
-            self.siigo_client.products,
+        missing_invoices, outdated_invoices = get_missing_outdated_invoices(
+            ref_invoices, unchecked_invoices
         )
 
         if len(missing_invoices) + len(outdated_invoices) == 0:
@@ -154,29 +158,30 @@ class Updater:
                 )
             except Exception as error:
                 self.logger.error(
-                    f"Error with invoice {invoice.name} check invoices_error.json"
+                    f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number} check invoices_error.json"
                 )
                 error_data = {
                     "type_op": "Creating",
-                    "product": json.loads(invoice.json()),
+                    "invoice": json.loads(invoice.json()),
                     "error": str(error),
                     "error_date": str(datetime.now()),
                 }
                 save_error(error_data, "invoices_error.json")
 
         for counter, difference_data in enumerate(outdated_invoices):
+            invoice = difference_data[0]
             try:
-                self.siigo_client.update_invoices(difference_data[0])
+                self.siigo_client.update_invoice(invoice)
                 self.logger.info(
                     f"{counter + 1}/{len(outdated_invoices)} invoice updated"
                 )
             except Exception as error:
                 self.logger.error(
-                    f"Error with client {difference_data[0].name} check invoices_errors.json"
+                    f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number} check invoices_error.json"
                 )
                 error_data = {
                     "type_op": "Updating",
-                    "client": json.loads(difference_data[0].json()),
+                    "invoice": json.loads(difference_data[0].json()),
                     "error": str(error),
                 }
                 save_error(error_data, "invoices_error.json")

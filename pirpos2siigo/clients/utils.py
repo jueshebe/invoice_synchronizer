@@ -210,13 +210,15 @@ def create_invoice(
     payments: List[Tuple[Union[str, int], float]],
     invoice_products: List[Tuple[Product, float, int, str]],
     total: float,
+    siigo_id: Optional[str] = None
 ) -> Invoice:
     """Create invoice."""
     return Invoice(
+        siigo_id=siigo_id,
         cachier=Employee(name=cachier_name, employee_id=cachier_id),
         seller=Employee(name=seller_name, employee_id=seller_id),
         client=client,
-        created_on=created_on,
+        created_on=datetime(created_on.year, created_on.month, created_on.day),
         invoice_prefix=get_prefix_map(configuration, invoice_prefix),
         invoice_number=invoice_number,
         payment_method=[

@@ -126,21 +126,21 @@ def get_missing_outdated_invoices(
 ) -> Tuple[List[Invoice], List[Tuple[Invoice, Dict[str, Any]]]]:
     """Divide unchecked_invoices in missing_invoices and outdated_invoices."""
     unchecked_numbers: List[str] = [
-        f"{invoice.invoice_prefix}{invoice.invoice_number}"
+        f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
         for invoice in unchecked_invoices
     ]
 
     missing_invoices = [
         invoice
         for invoice in ref_invoices
-        if f"{invoice.invoice_prefix}{invoice.invoice_number}"
+        if f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
         not in unchecked_numbers
     ]
 
     present_ref_invoices: List[Invoice] = [
         invoice
         for invoice in ref_invoices
-        if f"{invoice.invoice_prefix}{invoice.invoice_number}"
+        if f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
         in unchecked_numbers
     ]
 
@@ -150,7 +150,7 @@ def get_missing_outdated_invoices(
         def filter_outdated_invoice(invoice: Invoice) -> bool:
             """Get outdated_invoices."""
             return (
-                invoice.invoice_prefix == ref_invoice.invoice_prefix
+                invoice.invoice_prefix.siigo_id == ref_invoice.invoice_prefix.siigo_id
                 and invoice.invoice_number == ref_invoice.invoice_number
             )
 
@@ -164,10 +164,12 @@ def get_missing_outdated_invoices(
         ref_dict = ref_invoice.dict()
         for key in ref_dict:
             if (
-                key not in ["siigo_id", "product_id"]
+                key not in ["siigo_id", "invoice_prefix", "cachier", "seller", "products", "payment_method"]  # TODO: Make better this check
                 and unchecked_dict[key] != ref_dict[key]
             ):
-
+                if key == "client":
+                    if unchecked_invoice.client.document == ref_invoice.client.document:
+                        continue
                 ref_invoice.siigo_id = unchecked_invoice.siigo_id
                 difference = {key: unchecked_dict[key]}
                 outdated_invoices.append((ref_invoice, difference))

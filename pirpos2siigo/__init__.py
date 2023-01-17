@@ -36,10 +36,10 @@ siigo_connector = SiigoConnector(
     siigo_user_name, siigo_user_password, CONFIGURATION_PATH, logger
 )
 updater = Updater(pirpos_connector, siigo_connector, logger)
+
 if __name__ == "__main__":
-    # updater.update_clients()
+    # updater.update_clients()  # TODO: change page from next_url
     # updater.update_products()
-    date_1 = datetime(2022, 11, 1)
-    date_2 = datetime(2022, 11, 1)
-    invoices = pirpos_connector.get_pirpos_invoices_per_client(date_1, date_2)
-    siigo_connector.create_invoice(invoices[0])
+    date_1 = datetime(2022, 12, 1)
+    date_2 = datetime(2022, 12, 31)
+    updater.update_invoices(date_1, date_2)  # TODO: download invoices by x days, not all range

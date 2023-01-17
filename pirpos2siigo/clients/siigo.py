@@ -29,7 +29,7 @@ from pirpos2siigo.clients.utils import (
     ErrorCreatingSiigoInvoice,
     ErrorUpdatingSiigoClient,
     ErrorUpdatingSiigoProduct,
-    ErrorUpdatingSiigoInvoice
+    ErrorUpdatingSiigoInvoice,
 )
 
 
@@ -273,6 +273,7 @@ class SiigoConnector:
         init_day: datetime,
         end_day: datetime,
         page_size: int = 100,
+        update_data: bool = True,
     ) -> List[Invoice]:
         """Load Siigo invoices.
 
@@ -281,18 +282,21 @@ class SiigoConnector:
           List[Invoice]
           List with Siigo invoices
         """
+        if update_data:
+            self.get_siigo_products()
+            self.get_siigo_clients()
+
         day1 = init_day.strftime("%Y-%m-%d")
         day2 = (end_day + timedelta(days=1)).strftime("%Y-%m-%d")
         url = (
             f"https://api.siigo.com/v1/invoices?date_end={day2}"
             f"&date_start={day1}"
-            "&page={page}&"
-            f"page_size={page_size}"
+            # "&page={page}&"
+            f"&page_size={page_size}"
         )
-        payload = ""
         headers = {
             "Authorization": self.__siigo_access_token,
-            "Content-Type": "application/json; charset=UTF-8",
+            "Content-Type": "application/json",
         }
 
         page = 1
@@ -302,26 +306,37 @@ class SiigoConnector:
                 "GET",
                 url.format(page=page),
                 headers=headers,
-                data=payload,
             )
             if not response.ok:
+                if response.json()["Errors"][0]["Code"] == "document_query_service":
+                    continue
                 raise ErrorLoadingSiigoInvoices(
-                    f"Can't download Siigo clients\n {response.text}"
+                    f"Can't download Siigo invoices\n {response.text}"
                 )
 
-            data = response.json()["results"]
-            if len(data) == 0:
+            response_ob = response.json()
+            data = response_ob["results"]
+            next_link = response_ob["_links"].get("next", {"href": None})["href"]
+            if len(data) == 0 or next_link is None:
                 break
+            else:
+                url = next_link
 
             for invoice_info in data:
 
                 # select client
-                client_document = invoice_info.get("customer", {}).get(
-                    "identification"
+                client_document_str = str(
+                    invoice_info.get("customer", {}).get("identification", "0")
+                )
+
+                client_document = (
+                    int(client_document_str)
+                    if client_document_str.isnumeric()
+                    else 0
                 )
 
                 def filter_client(
-                    client: Client, document: str = client_document
+                    client: Client, document: int = client_document
                 ) -> bool:
                     return client.document == document
 
@@ -351,8 +366,8 @@ class SiigoConnector:
                         product = filtered_products[0]
                     else:
                         product = self.__products[0]
-                    price = product_info["total"]
                     quantity = product_info["quantity"]
+                    price = int(product_info["total"] / quantity)
                     tax_name = product_info["taxes"][0]["name"]
                     invoice_products.append(
                         (product, price, quantity, tax_name)
@@ -377,9 +392,9 @@ class SiigoConnector:
                     ],
                     invoice_products=invoice_products,
                     total=invoice_info["total"],
+                    siigo_id=invoice_info["id"],
                 )
                 invoices.append(invoice_obj)
-            page += 1
 
         return invoices
 
@@ -772,7 +787,7 @@ class SiigoConnector:
 
     def update_invoice(self, invoice: Invoice) -> None:
         """Create invoice."""
-        url = "https://api.siigo.com/v1/invoices"
+        url = "https://api.siigo.com/v1/invoices/{invoice_id}"
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
@@ -818,17 +833,17 @@ class SiigoConnector:
 
         for retries in range(30):
             response = requests.request(
-                "POST",
-                url,
+                "PUT",
+                url.format(invoice_id=invoice.siigo_id),
                 headers=headers,
                 data=str(payload),
             )
             if not response.ok:
-                if response.json()["Errors"][0]["Code"] == "already_exists":
-                    self.__logger.warning(
-                        f"Document {invoice.invoice_prefix}{invoice.invoice_number} already exists"
-                    )
-                    return
+                # if response.json()["Errors"][0]["Code"] == "already_exists":
+                #     self.__logger.warning(
+                #         f"Document {invoice.invoice_prefix}{invoice.invoice_number} already exists"
+                #     )
+                #     return
 
                 if (
                     response.json()["Errors"][0]["Code"]
@@ -894,11 +909,12 @@ if __name__ == "__main__":
     assert isinstance(user_name, str)
     assert isinstance(user_password, str)
     connector = SiigoConnector(user_name, user_password, PATH)
-
+    connector.get_siigo_clients()
+    connector.get_siigo_products()
     # test download invoices
-    # date_1 = datetime(2022, 9, 2)
-    # date_2 = datetime(2022, 9, 2)
-    # list_invoices = connector.get_siigo_invoices(date_1, date_2, 100)
+    date_1 = datetime(2022, 9, 2)
+    date_2 = datetime(2022, 10, 2)
+    list_invoices = connector.get_siigo_invoices(date_1, date_2, 100)
 
     # test_client_json = connector.clients[0].json()
     # test_client = Client(**json.loads(test_client_json))
@@ -912,5 +928,5 @@ if __name__ == "__main__":
     product_test.name = product_test.name.upper()
     # product.product_id = "ggg"
     # connector.create_product(product)
-    connector.update_product(product)
+    # connector.update_product(product)
     pass

@@ -1,5 +1,5 @@
 """Model for invoices."""
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 from pirpos2siigo.models.clients import Client

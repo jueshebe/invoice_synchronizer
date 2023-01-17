@@ -28,7 +28,7 @@ class PirposConnector:
         pirpos_username: str,
         pirpos_password: str,
         configuration_path: str,
-        logger: Logger = logging.getLogger()
+        logger: Logger = logging.getLogger(),
     ):
         """Parameters used to make a connection."""
         self.__logger = logger
@@ -40,7 +40,7 @@ class PirposConnector:
         self.__clients: List[Client]
         # self.get_pirpos_clients()
         # self.get_pirpos_products()
-        
+
         self.__logger.info("Pirpos connector initialized.")
 
     def __get_pirpos_access_token(self) -> str:
@@ -113,7 +113,6 @@ class PirposConnector:
             if len(data) == 0:
                 break
 
-
             for client_data in data:
                 name = client_data["name"]
                 client = create_client(
@@ -142,7 +141,6 @@ class PirposConnector:
                 )
                 clients.append(client)
             page += 1
-
 
         self.__clients = clients
 
@@ -263,12 +261,11 @@ class PirposConnector:
             for invoice_info in data:
                 try:
                     # select client
-                    client_document = invoice_info["client"].get(
-                        "document", None
-                    )
+                    client_document_str = str(invoice_info["client"].get("document", "0"))
+                    client_document = int(client_document_str) if client_document_str.isnumeric() else 0
 
                     def filter_client(
-                        client: Client, document: str = client_document
+                        client: Client, document: int = client_document
                     ) -> bool:
                         return client.document == document
 
@@ -312,7 +309,9 @@ class PirposConnector:
                         seller_name=invoice_info["seller"]["name"],
                         seller_id=invoice_info["seller"]["idInternal"],
                         client=client,
-                        created_on=invoice_info["createdOn"],
+                        created_on=datetime.strptime(
+                            invoice_info["createdOn"], "%Y-%m-%dT%H:%M:%S.%f%z"
+                        ),
                         invoice_prefix=invoice_info["invoicePrefix"],
                         invoice_number=invoice_info["seq"],
                         payments=[
@@ -363,7 +362,9 @@ if __name__ == "__main__":
     assert isinstance(user_name, str)
     assert isinstance(user_password, str)
     time_1 = time.time()
-    connector = PirposConnector(user_name, user_password, PATH, logging.getLogger())
+    connector = PirposConnector(
+        user_name, user_password, PATH, logging.getLogger()
+    )
     connector.get_pirpos_products()
     print(time.time() - time_1)
     date_1 = datetime(2022, 11, 2)
