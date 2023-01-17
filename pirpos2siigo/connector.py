@@ -991,7 +991,7 @@ class Connector:
         if successful_pirpos and successful_siigo:
             assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
             assert isinstance(siigo_invoices, pd.DataFrame)
-            invoices = get_missing_invoices(
+            invoices, _ = get_missing_invoices(
                 pirpos_invoices_per_client, siigo_invoices
             )
             if len(invoices) == 0:
@@ -1087,6 +1087,8 @@ class Connector:
             finally:
                 time.sleep(1)
         print("guardando json")
+        a = "1234"
+        # TODO revisar save cuando se hacen thears y la ruta
         with open("errores_facturas.json", "w") as json_file:
             json.dump(erroresBackUp, json_file, indent=6)
         return contador_errores
@@ -1146,12 +1148,16 @@ class Connector:
             data_frame = pd.DataFrame(
                 np_pqt[:, 1:], index=np_pqt[:, 0], columns=["quantity", "total"]
             )
-            data_frame[["quantity", "total"]] = data_frame[["quantity", "total"]].apply(pd.to_numeric)
+            data_frame[["quantity", "total"]] = data_frame[
+                ["quantity", "total"]
+            ].apply(pd.to_numeric)
         else:
             data_frame = pd.DataFrame([], columns=["quantity", "total"])
         return data_frame
 
-    def get_history_sold_units(self, years_months: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def get_history_sold_units(
+        self, years_months: List[str]
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """get quantity and total sold for each product in a list of periods [year-month]
 
         Parameters
@@ -1175,12 +1181,44 @@ class Connector:
             info_df = self._get_sold_units(date1, date2)
             history_df_quantity[date1.strftime("%Y-%m")] = info_df["quantity"]
             history_df_total[date1.strftime("%Y-%m")] = info_df["total"]
-        history_df_quantity['Total'] = history_df_quantity.sum(axis=1)
-        history_df_total['Total'] = history_df_total.sum(axis=1)
+        history_df_quantity["Total"] = history_df_quantity.sum(axis=1)
+        history_df_total["Total"] = history_df_total.sum(axis=1)
 
-        history_df_quantity = history_df_quantity.sort_values(by=["Total"], axis=0, ascending=False)
-        history_df_total = history_df_total.sort_values(by=["Total"], axis=0, ascending=False)
+        history_df_quantity = history_df_quantity.sort_values(
+            by=["Total"], axis=0, ascending=False
+        )
+        history_df_total = history_df_total.sort_values(
+            by=["Total"], axis=0, ascending=False
+        )
 
-        history_df_quantity = history_df_quantity.applymap(lambda x: round(x, 2))
+        history_df_quantity = history_df_quantity.applymap(
+            lambda x: round(x, 2)
+        )
         history_df_total = history_df_total.applymap(lambda x: round(x, 2))
         return history_df_quantity, history_df_total
+
+    def check_invoices_integrity(
+        self, in_date: datetime, end_date: datetime
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Check integrity of invoices exported to siigo."""
+        (
+            successful_pirpos,
+            pirpos_invoices_per_client,
+        ) = self._load_pirpos_invoices_per_client(in_date, end_date)
+        successful_siigo, siigo_invoices = self._load_siigo_invoices(
+            in_date, end_date
+        )
+
+        if successful_pirpos and successful_siigo:
+            assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
+            assert isinstance(siigo_invoices, pd.DataFrame)
+            missing_invoices, left_merge = get_missing_invoices(
+                pirpos_invoices_per_client, siigo_invoices
+            )
+
+        elif successful_pirpos:
+            assert isinstance(pirpos_invoices_per_client, pd.DataFrame)
+            missing_invoices = pirpos_invoices_per_client
+        else:
+            print("There aren't invoices to compare")
+            return 0
