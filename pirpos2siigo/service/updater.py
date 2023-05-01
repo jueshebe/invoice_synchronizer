@@ -70,11 +70,11 @@ class Updater:
                 )
             except Exception as error:
                 self.logger.error(
-                    f"Error with client {client.document} check clients_errors.json"
+                    f"Error with client {difference_data[0].document} check clients_errors.json"
                 )
                 error_data = {
                     "type_op": "Updating",
-                    "client": json.loads(client.json()),
+                    "client": json.loads(difference_data[0].json()),
                     "error": str(error),
                 }
                 save_error(error_data, "clients_error.json")

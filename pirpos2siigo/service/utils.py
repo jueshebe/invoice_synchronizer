@@ -170,6 +170,10 @@ def get_missing_outdated_invoices(
                 if key == "client":
                     if unchecked_invoice.client.document == ref_invoice.client.document:
                         continue
+                if key == "created_on":
+                    if unchecked_invoice.created_on.date() == ref_invoice.created_on.date():
+                        continue
+
                 ref_invoice.siigo_id = unchecked_invoice.siigo_id
                 difference = {key: unchecked_dict[key]}
                 outdated_invoices.append((ref_invoice, difference))

@@ -234,6 +234,9 @@ class PirposConnector:
             "Referer": "https://app.pirpos.com/",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
+        #to UTC
+        init_day = init_day + timedelta(hours=5)
+        end_day = end_day + timedelta(hours=5)
 
         while True:
             time1 = init_day + timedelta(days=days)
@@ -243,8 +246,8 @@ class PirposConnector:
                 else end_day
             )
             days += step_days
-            date1_str = datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
-            date2_str = datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
+            date1_str = datetime.strftime(time1, "%Y-%m-%dT%H:%M:%S.000Z")
+            date2_str = datetime.strftime(time2, "%Y-%m-%dT%H:%M:%S.000Z")
             url = (
                 f"https://api.pirpos.com/reports/reportSalesInvoices?"
                 f"status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
@@ -302,6 +305,9 @@ class PirposConnector:
                             (product, price, quantity, tax_name)
                         )
 
+                    created_on=datetime.strptime(
+                        invoice_info["createdOn"], "%Y-%m-%dT%H:%M:%S.%fZ"
+                    ) - timedelta(hours=5)
                     invoice_obj = create_invoice(
                         configuration=self.__configuration,
                         cachier_name=invoice_info["cashier"]["name"],
@@ -309,9 +315,7 @@ class PirposConnector:
                         seller_name=invoice_info["seller"]["name"],
                         seller_id=invoice_info["seller"]["idInternal"],
                         client=client,
-                        created_on=datetime.strptime(
-                            invoice_info["createdOn"], "%Y-%m-%dT%H:%M:%S.%f%z"
-                        ),
+                        created_on=created_on,
                         invoice_prefix=invoice_info["invoicePrefix"],
                         invoice_number=invoice_info["seq"],
                         payments=[
@@ -359,16 +363,15 @@ if __name__ == "__main__":
     PATH = (
         "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
     )
+    PATH = "/home/julian/projects/pirpos2siigo/configuration.JSON"
     assert isinstance(user_name, str)
     assert isinstance(user_password, str)
-    time_1 = time.time()
     connector = PirposConnector(
         user_name, user_password, PATH, logging.getLogger()
     )
-    connector.get_pirpos_products()
-    print(time.time() - time_1)
-    date_1 = datetime(2022, 11, 2)
-    date_2 = datetime(2022, 11, 2)
+    # connector.get_pirpos_products()
+    date_1 = datetime(2023, 1, 2)
+    date_2 = datetime(2023, 1, 2)
     time_1 = time.time()
     loaded_invoices = connector.get_pirpos_invoices_per_client(date_1, date_2)
     print(time.time() - time_1)

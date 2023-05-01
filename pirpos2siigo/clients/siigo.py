@@ -145,8 +145,11 @@ class SiigoConnector:
                     contacts = client_data.get("contacts")[0]
                 else:
                     contacts = {}
-
-                name = " ".join(client_data["name"])
+                
+                try:
+                    name = " ".join(client_data["name"])
+                except TypeError as error:
+                    continue
                 # if "gral s.a.s" in name:
                 #     xas = 1
 
@@ -272,7 +275,7 @@ class SiigoConnector:
         self,
         init_day: datetime,
         end_day: datetime,
-        page_size: int = 100,
+        page_size: int = 50,
         update_data: bool = True,
     ) -> List[Invoice]:
         """Load Siigo invoices.
@@ -301,7 +304,8 @@ class SiigoConnector:
 
         page = 1
         invoices: List[Invoice] = []
-        while True:
+        loop = True
+        while loop:
             response = requests.request(
                 "GET",
                 url.format(page=page),
@@ -317,8 +321,10 @@ class SiigoConnector:
             response_ob = response.json()
             data = response_ob["results"]
             next_link = response_ob["_links"].get("next", {"href": None})["href"]
-            if len(data) == 0 or next_link is None:
+            if len(data) == 0:
                 break
+            if next_link is None:
+                loop = False
             else:
                 url = next_link
 
@@ -534,7 +540,7 @@ class SiigoConnector:
             "phones": [
                 {
                     "indicative": "",
-                    "number": client.phone[0:10],
+                    "number": client.phone,
                     "extension": "",
                 }
             ],

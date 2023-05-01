@@ -218,7 +218,7 @@ def create_invoice(
         cachier=Employee(name=cachier_name, employee_id=cachier_id),
         seller=Employee(name=seller_name, employee_id=seller_id),
         client=client,
-        created_on=datetime(created_on.year, created_on.month, created_on.day),
+        created_on=created_on,
         invoice_prefix=get_prefix_map(configuration, invoice_prefix),
         invoice_number=invoice_number,
         payment_method=[
