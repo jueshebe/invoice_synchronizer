@@ -1,5 +1,5 @@
 """End modules."""
-__version__ = "0.1.2"
+__version__ = "1.0.0"
 
 import sys
 import os
@@ -22,24 +22,20 @@ consoleHandler.setFormatter(logStreamFormatter)
 consoleHandler.setLevel(level=logging.DEBUG)
 logger.addHandler(consoleHandler)
 
-siigo_user_name = str(os.getenv("SIIGO_USER_NAME"))
-siigo_user_password = str(os.getenv("SIIGO_ACCESS_KEY"))
-pirpos_user_name = str(os.getenv("PIRPOS_USER_NAME"))
-pirpos_user_password = str(os.getenv("PIRPOS_PASSWORD"))
-CONFIGURATION_PATH = (
-    "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
-)
+SIIGO_USER_NAME = str(os.getenv("SIIGO_USER_NAME"))
+SIIGO_USER_PASSWORD = str(os.getenv("SIIGO_ACCESS_KEY"))
+PIRPOS_USER_NAME = str(os.getenv("PIRPOS_USER_NAME"))
+PIRPOS_USER_PASSWORD = str(os.getenv("PIRPOS_PASSWORD"))
+CONFIGURATION_PATH = "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
 pirpos_connector = PirposConnector(
-    pirpos_user_name, pirpos_user_password, CONFIGURATION_PATH, logger
+    PIRPOS_USER_NAME, PIRPOS_USER_PASSWORD, CONFIGURATION_PATH, logger
 )
-siigo_connector = SiigoConnector(
-    siigo_user_name, siigo_user_password, CONFIGURATION_PATH, logger
-)
+siigo_connector = SiigoConnector(SIIGO_USER_NAME, SIIGO_USER_PASSWORD, CONFIGURATION_PATH, logger)
 updater = Updater(pirpos_connector, siigo_connector, logger)
 
 if __name__ == "__main__":
-    # updater.update_clients()  # TODO: change page from next_url
-    # updater.update_products()
+    updater.update_clients()  # TODO: change page from next_url
+    updater.update_products()
     date_1 = datetime(2022, 12, 1)
     date_2 = datetime(2022, 12, 31)
     updater.update_invoices(date_1, date_2)  # TODO: download invoices by x days, not all range

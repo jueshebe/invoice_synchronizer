@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pirpos2siigo"
-version = "0.1.2"
+version = "1.0.0"
 description = ""
 authors = ["JulianEstebanHerrera <julianesteban.herrera@mercadolibre.com.co>"]
 
@@ -40,31 +40,8 @@ implicit_reexport = true
 strict_optional = true
 
 [[tool.mypy.overrides]]
-module = "newrelic.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "kpi_builder_lib.*"
-ignore_missing_imports = true
-
-
-[[tool.mypy.overrides]]
 module = "pytest.*"
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = "melitk.*"
-ignore_missing_imports = true
-
-
-[[tool.mypy.overrides]]
-module = "google.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "google"
-ignore_missing_imports = true
-
 [tool.black]
-line-length = 80
-
+line-length = 100

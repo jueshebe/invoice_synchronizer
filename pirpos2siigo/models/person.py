@@ -1,8 +1,9 @@
 """Model for clients."""
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional, List
 from pydantic import BaseModel, validator
 from pirpos2siigo.models.utils import normalize
+
 
 class CityDetail(BaseModel):
     """City info."""
@@ -10,22 +11,22 @@ class CityDetail(BaseModel):
     city_name: str
     city_state: str
     city_code: str
-    country_code: str  # TODO: Must be Enum
+    country_code: str
     state_code: str
 
 
 class Responsibilities(Enum):
     """Dian responsibilities."""
 
-    O_13 = "O-13"
-    O_15 = "O-15"
-    O_23 = "O-23"
-    O_47 = "O-47"
-    R_99_PN = "R-99-PN"
+    O_13 = "O-13"  # gran contribuyente
+    O_15 = "O-15"  # autoretenedor
+    O_23 = "O-23"  # agente de retencion IVA
+    O_47 = "O-47"  # regimen simple de tributacion
+    R_99_PN = "R-99-PN"  # no responsable
 
 
 class DocumentType(Enum):
-    """DIAN document types."""
+    """DIAN document types (obtained from siigo api)."""
 
     REGISTRO_CIVIL = 11
     TARJETA_IDENTIDAD = 12
@@ -41,11 +42,17 @@ class DocumentType(Enum):
     NUIP = 91
 
 
-class Client(BaseModel):
+class VinculationType(Enum):
+    """Person type."""
+
+    ClIENT_d = "CLIENT"
+    EMPLOYEE = "EMPLOYEE"
+    SUPPLIER = "SUPPLIER"
+
+
+class Person(BaseModel):
     """Client info."""
 
-    siigo_id: Optional[str]
-    pirpos_id: Optional[str]
     name: str
     email: str
     phone: str
@@ -53,6 +60,7 @@ class Client(BaseModel):
     document: int
     check_digit: Optional[int]
     document_type: DocumentType
+    vinculation_type: List[VinculationType]
     responsibilities: Responsibilities
     city_detail: CityDetail
 
