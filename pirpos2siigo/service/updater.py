@@ -146,6 +146,10 @@ class Updater:
             ref_invoices, unchecked_invoices
         )
 
+        total = 0
+        for ref_invoice in ref_invoices:
+            total += ref_invoice.total
+
         if len(missing_invoices) + len(outdated_invoices) == 0:
             self.logger.info("All invoices already updated.")
             return

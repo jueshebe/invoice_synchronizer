@@ -117,8 +117,12 @@ def create_client(
     )
 
 
-def get_tax_map(configuration: Pirpos2SiigoMap, name_key: str) -> TaxInfo:
+def get_tax_map(configuration: Pirpos2SiigoMap, name_key: Optional[str]) -> Optional[TaxInfo]:
+
     """Find tax mapping."""
+    if not name_key:
+        return None
+
     for tax_map in configuration.taxes_map:
         if name_key in [tax_map.siigo_name, tax_map.pirpos_name]:
             return TaxInfo(
@@ -208,7 +212,7 @@ def create_invoice(
     invoice_prefix: str,
     invoice_number: int,
     payments: List[Tuple[Union[str, int], float]],
-    invoice_products: List[Tuple[Product, float, int, str]],
+    invoice_products: List[Tuple[Product, float, int, Optional[str]]],
     total: float,
     siigo_id: Optional[str] = None
 ) -> Invoice:
