@@ -1,5 +1,5 @@
 """PirPos client."""
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import os
 import json
 from logging import Logger
@@ -282,7 +282,7 @@ class PirposConnector:
                         client = self.__configuration.default_client
 
                     # select products
-                    invoice_products: List[Tuple[Product, float, int, str]] = []
+                    invoice_products: List[Tuple[Product, float, int, Optional[str]]] = []
                     for product_info in invoice_info["products"]:
                         product_id = product_info["idInternal"]
 
@@ -300,7 +300,16 @@ class PirposConnector:
                             product = self.__products[0]
                         price = product_info["price"]
                         quantity = product_info["quantity"]
-                        tax_name = invoice_info["taxes"][0]["name"]
+                        if len(invoice_info["taxes"]) > 0:
+                            tax_name = None
+                            for tax_info in invoice_info["taxes"]:
+                                if tax_info.get("name"):
+                                    tax_name = tax_info["name"]
+                                    break
+                            if not tax_name:
+                                raise ValueError("Can't get tax name from pirpos invoice")
+                        else:
+                            tax_name = None
                         invoice_products.append(
                             (product, price, quantity, tax_name)
                         )

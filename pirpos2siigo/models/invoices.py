@@ -23,7 +23,7 @@ class InvoiceProduct(BaseModel):
     product: Product
     price: float
     quantity: int
-    tax: TaxInfo
+    tax: Optional[TaxInfo]
 
 
 class Payment(BaseModel):

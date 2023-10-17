@@ -374,7 +374,11 @@ class SiigoConnector:
                         product = self.__products[0]
                     quantity = product_info["quantity"]
                     price = int(product_info["total"] / quantity)
-                    tax_name = product_info["taxes"][0]["name"]
+                    if product_info.get("taxes"):
+                        tax_name = product_info["taxes"][0]["name"]
+                    else:
+                        tax_name = None
+
                     invoice_products.append(
                         (product, price, quantity, tax_name)
                     )
@@ -717,11 +721,11 @@ class SiigoConnector:
                     "description": invoice_product.product.name,
                     "quantity": invoice_product.quantity,
                     "price": round(
-                        invoice_product.price / (1 + invoice_product.tax.value),
+                        invoice_product.price / (1 + (invoice_product.tax.value if invoice_product.tax else 0)),
                         2,
                     ),
                     "discount": 0,
-                    "taxes": [{"id": invoice_product.tax.siigo_id}],
+                    "taxes": [{"id": invoice_product.tax.siigo_id}] if invoice_product.tax else [],
                 }
                 for invoice_product in invoice.products
             ],
@@ -782,6 +786,7 @@ class SiigoConnector:
                         {
                             "id": payload["payments"][0]["id"],
                             "value": pyment,
+                            "due_date": invoice.created_on.strftime("%Y-%m-%d"),
                         }
                     ]
             else:
