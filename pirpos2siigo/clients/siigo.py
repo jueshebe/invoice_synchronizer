@@ -275,7 +275,7 @@ class SiigoConnector:
         self,
         init_day: datetime,
         end_day: datetime,
-        page_size: int = 50,
+        page_size: int = 200,
         update_data: bool = True,
     ) -> List[Invoice]:
         """Load Siigo invoices.

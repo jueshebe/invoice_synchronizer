@@ -142,9 +142,11 @@ class Updater:
         )
 
         # get missing and ourdated clients
-        missing_invoices, outdated_invoices = get_missing_outdated_invoices(
-            ref_invoices, unchecked_invoices
-        )
+        (
+            missing_invoices,
+            outdated_invoices,
+            must_be_deleted,
+        ) = get_missing_outdated_invoices(ref_invoices, unchecked_invoices)
 
         total = 0
         for ref_invoice in ref_invoices:

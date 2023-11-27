@@ -123,11 +123,16 @@ def get_missing_outdated_products(
 def get_missing_outdated_invoices(
     ref_invoices: List[Invoice],
     unchecked_invoices: List[Invoice],
-) -> Tuple[List[Invoice], List[Tuple[Invoice, Dict[str, Any]]]]:
+) -> Tuple[List[Invoice], List[Tuple[Invoice, Dict[str, Any]]], List[Invoice]]:
     """Divide unchecked_invoices in missing_invoices and outdated_invoices."""
     unchecked_numbers: List[str] = [
         f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
         for invoice in unchecked_invoices
+    ]
+
+    ref_invoices_numbers: List[str] = [
+        f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
+        for invoice in ref_invoices 
     ]
 
     missing_invoices = [
@@ -135,6 +140,13 @@ def get_missing_outdated_invoices(
         for invoice in ref_invoices
         if f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
         not in unchecked_numbers
+    ]
+
+    must_be_deleted_invoices = [
+        invoice
+        for invoice in unchecked_invoices
+        if f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
+        not in ref_invoices_numbers
     ]
 
     present_ref_invoices: List[Invoice] = [
@@ -179,7 +191,7 @@ def get_missing_outdated_invoices(
                 outdated_invoices.append((ref_invoice, difference))
                 break
 
-    return (missing_invoices, outdated_invoices)
+    return (missing_invoices, outdated_invoices, must_be_deleted_invoices)
 
 
 def save_error(error_data: Dict[str, str], file_name: str) -> None:
