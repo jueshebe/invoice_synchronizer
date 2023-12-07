@@ -1,5 +1,6 @@
 """Updater Class."""
 from logging import Logger
+from copy import copy
 from datetime import datetime
 import json
 import logging
@@ -156,23 +157,34 @@ class Updater:
             self.logger.info("All invoices already updated.")
             return
 
-        for counter, invoice in enumerate(missing_invoices):
-            try:
-                self.siigo_client.create_invoice(invoice)
-                self.logger.info(
-                    f"{counter + 1}/{len(missing_invoices)} invoices created"
-                )
-            except Exception as error:
-                self.logger.error(
-                    f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number} check invoices_error.json"
-                )
-                error_data = {
-                    "type_op": "Creating",
-                    "invoice": json.loads(invoice.json()),
-                    "error": str(error),
-                    "error_date": str(datetime.now()),
-                }
-                save_error(error_data, "invoices_error.json")
+        for _ in range(100):
+            failed_invoices = []
+            for counter, invoice in enumerate(missing_invoices):
+                try:
+                    self.siigo_client.create_invoice(invoice)
+                    self.logger.info(
+                        f"{counter + 1}/{len(missing_invoices)} invoices created"
+                    )
+                except Exception as error:
+                    failed_invoices.append(invoice)
+                    self.logger.warning(
+                        f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number}\nerror: {error}"
+                    )
+                    # self.logger.error(
+                    #     f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number} check invoices_error.json"
+                    # )
+                    # error_data = {
+                    #     "type_op": "Creating",
+                    #     "invoice": json.loads(invoice.json()),
+                    #     "error": str(error),
+                    #     "error_date": str(datetime.now()),
+                    # }
+                    # save_error(error_data, "invoices_error.json")
+            missing_invoices = copy(failed_invoices)
+            failed_invoices = []
+
+            if len(missing_invoices) == 0:
+                break
 
         for counter, difference_data in enumerate(outdated_invoices):
             invoice = difference_data[0]

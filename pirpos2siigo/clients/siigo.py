@@ -764,7 +764,7 @@ class SiigoConnector:
                     self.__logger.info(
                         "duplicated_document error. try to send it again"
                     )
-                    time.sleep(2)
+                    raise SystemError("can't send invoice error= duplicated_document")
 
                 elif (
                     response.json()["Errors"][0]["Code"]
@@ -789,6 +789,12 @@ class SiigoConnector:
                             "due_date": invoice.created_on.strftime("%Y-%m-%d"),
                         }
                     ]
+                else:
+                    error_msg = response.json()["Errors"][0]["Code"]
+                    self.__logger.info(
+                        "error sending invoice"
+                    )
+                    raise SystemError(f"error sending invoice {error_msg}")
             else:
                 return
 

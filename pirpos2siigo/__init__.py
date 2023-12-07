@@ -42,8 +42,8 @@ if __name__ == "__main__":
     updater = Updater(pirpos_connector, siigo_connector, logger)
     # updater.update_clients()  # TODO:f change page from next_url
     # updater.update_products()
-    date_1 = datetime(2023, 10, 1)
-    date_2 = datetime(2023, 10, 31)
+    date_1 = datetime(2023, 11, 1)
+    date_2 = datetime(2023, 11, 30)
     updater.update_invoices(
         date_1, date_2
     )  # TODO: download invoices by x days, not all rang
