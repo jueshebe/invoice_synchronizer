@@ -234,7 +234,7 @@ class PirposConnector:
             "Referer": "https://app.pirpos.com/",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
-        #to UTC
+        # to UTC
         init_day = init_day + timedelta(hours=5)
         end_day = end_day + timedelta(hours=5)
 
@@ -264,8 +264,14 @@ class PirposConnector:
             for invoice_info in data:
                 try:
                     # select client
-                    client_document_str = str(invoice_info["client"].get("document", "0"))
-                    client_document = int(client_document_str) if client_document_str.isnumeric() else 0
+                    client_document_str = str(
+                        invoice_info["client"].get("document", "0")
+                    )
+                    client_document = (
+                        int(client_document_str)
+                        if client_document_str.isnumeric()
+                        else 0
+                    )
 
                     def filter_client(
                         client: Client, document: int = client_document
@@ -282,7 +288,9 @@ class PirposConnector:
                         client = self.__configuration.default_client
 
                     # select products
-                    invoice_products: List[Tuple[Product, float, int, Optional[str]]] = []
+                    invoice_products: List[
+                        Tuple[Product, float, int, Optional[str]]
+                    ] = []
                     for product_info in invoice_info["products"]:
                         product_id = product_info["idInternal"]
 
@@ -307,14 +315,16 @@ class PirposConnector:
                                     tax_name = tax_info["name"]
                                     break
                             if not tax_name:
-                                raise ValueError("Can't get tax name from pirpos invoice")
+                                raise ValueError(
+                                    "Can't get tax name from pirpos invoice"
+                                )
                         else:
                             tax_name = None
                         invoice_products.append(
                             (product, price, quantity, tax_name)
                         )
 
-                    created_on=datetime.strptime(
+                    created_on = datetime.strptime(
                         invoice_info["createdOn"], "%Y-%m-%dT%H:%M:%S.%fZ"
                     ) - timedelta(hours=5)
                     invoice_obj = create_invoice(
@@ -328,7 +338,10 @@ class PirposConnector:
                         invoice_prefix=invoice_info["invoicePrefix"],
                         invoice_number=invoice_info["seq"],
                         payments=[
-                            (payment["paymentMethod"], payment["value"])
+                            (
+                                payment["paymentMethod"],
+                                round(payment["value"], 5),
+                            )
                             for payment in invoice_info["paid"][
                                 "paymentMethodValue"
                             ]
