@@ -75,7 +75,10 @@ class SiigoConnector:
             "username": self.__siigo_username,
             "access_key": self.__siigo_access_key,
         }
-        headers = {"Content-Type": "application/json; charset=UTF-8"}
+        headers = {
+            "Content-Type": "application/json",
+            "Partner-Id": "DesarrolloPropio"
+        }
         response = requests.post(url, data=json.dumps(values), headers=headers)
 
         if not response.ok:
@@ -117,6 +120,7 @@ class SiigoConnector:
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio"
         }
         page = 1
         clients: List[Client] = []
@@ -206,6 +210,7 @@ class SiigoConnector:
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio"
         }
 
         page = 0
@@ -300,6 +305,7 @@ class SiigoConnector:
         headers = {
             "Authorization": self.__siigo_access_token,
             "Content-Type": "application/json",
+            "Partner-Id": "DesarrolloPropio"
         }
 
         page = 1
@@ -420,6 +426,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio"
         }
 
         full_name = client.name.split(" ")
@@ -504,6 +511,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio"
         }
 
         full_name = client.name.split(" ")
@@ -555,7 +563,7 @@ class SiigoConnector:
                     "email": client.email,
                     "phone": {
                         "indicative": "",
-                        "number": client.phone[0:10],
+                        "number": client.phone[0:9],
                         "extension": "",
                     },
                 }
@@ -587,6 +595,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio"
         }
         if len(product.taxes) > 0:
             tax = [{"id": product.taxes[0].siigo_id}]
@@ -648,6 +657,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio"
         }
         if len(product.taxes) > 0:
             tax = [{"id": product.taxes[0].siigo_id}]
@@ -703,6 +713,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio"
         }
 
         payload = {
@@ -808,6 +819,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio"
         }
 
         payload = {
