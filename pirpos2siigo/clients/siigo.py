@@ -1,6 +1,7 @@
 """Siigo client."""
 from typing import List, Tuple
 import os
+import json
 import re
 import time
 import json
@@ -70,6 +71,19 @@ class SiigoConnector:
             access_token
 
         """
+        path_folder = os.path.join(
+            os.path.expanduser("~"), ".config/pirpos2siigo"
+        )
+        file_path = os.path.join(path_folder, "token.json")
+        os.makedirs(path_folder, exist_ok=True)
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as file:
+                dict_data = json.loads(file.read())
+            access_token = dict_data["token"]
+            time = datetime.strptime(dict_data["time"], "%Y-%m-%d-%H-%M")
+            if (datetime.now() - time).seconds/3600 < 10:
+                return access_token
+
         url = "https://api.siigo.com/auth"
         values = {
             "username": self.__siigo_username,
@@ -77,7 +91,7 @@ class SiigoConnector:
         }
         headers = {
             "Content-Type": "application/json",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
         response = requests.post(url, data=json.dumps(values), headers=headers)
 
@@ -94,6 +108,15 @@ class SiigoConnector:
             raise ErrorSiigoToken(
                 "access_token key is not present in the respose"
             )
+
+        with open(file_path, "w", encoding="utf-8") as file:
+            json_data = json.dumps(
+                {
+                    "token": access_token,
+                    "time": datetime.now().strftime("%Y-%m-%d-%H-%M"),
+                }
+            )
+            file.write(json_data)
 
         return access_token
 
@@ -120,7 +143,7 @@ class SiigoConnector:
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
         page = 1
         clients: List[Client] = []
@@ -149,7 +172,7 @@ class SiigoConnector:
                     contacts = client_data.get("contacts")[0]
                 else:
                     contacts = {}
-                
+
                 try:
                     name = " ".join(client_data["name"])
                 except TypeError as error:
@@ -210,7 +233,7 @@ class SiigoConnector:
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
-            "Partner-Id": "DesarrolloPropio"
+            # "Partner-Id": "DesarrolloPropio",
         }
 
         page = 0
@@ -305,7 +328,7 @@ class SiigoConnector:
         headers = {
             "Authorization": self.__siigo_access_token,
             "Content-Type": "application/json",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
 
         page = 1
@@ -318,7 +341,10 @@ class SiigoConnector:
                 headers=headers,
             )
             if not response.ok:
-                if response.json()["Errors"][0]["Code"] == "document_query_service":
+                if (
+                    response.json()["Errors"][0]["Code"]
+                    == "document_query_service"
+                ):
                     continue
                 raise ErrorLoadingSiigoInvoices(
                     f"Can't download Siigo invoices\n {response.text}"
@@ -326,7 +352,9 @@ class SiigoConnector:
 
             response_ob = response.json()
             data = response_ob["results"]
-            next_link = response_ob["_links"].get("next", {"href": None})["href"]
+            next_link = response_ob["_links"].get("next", {"href": None})[
+                "href"
+            ]
             if len(data) == 0:
                 break
             if next_link is None:
@@ -335,7 +363,6 @@ class SiigoConnector:
                 url = next_link
 
             for invoice_info in data:
-
                 # select client
                 client_document_str = str(
                     invoice_info.get("customer", {}).get("identification", "0")
@@ -426,7 +453,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
 
         full_name = client.name.split(" ")
@@ -511,7 +538,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
 
         full_name = client.name.split(" ")
@@ -595,7 +622,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
         if len(product.taxes) > 0:
             tax = [{"id": product.taxes[0].siigo_id}]
@@ -657,7 +684,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
         if len(product.taxes) > 0:
             tax = [{"id": product.taxes[0].siigo_id}]
@@ -713,7 +740,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
 
         payload = {
@@ -732,11 +759,21 @@ class SiigoConnector:
                     "description": invoice_product.product.name,
                     "quantity": invoice_product.quantity,
                     "price": round(
-                        invoice_product.price / (1 + (invoice_product.tax.value if invoice_product.tax else 0)),
+                        invoice_product.price
+                        / (
+                            1
+                            + (
+                                invoice_product.tax.value
+                                if invoice_product.tax
+                                else 0
+                            )
+                        ),
                         2,
                     ),
                     "discount": 0,
-                    "taxes": [{"id": invoice_product.tax.siigo_id}] if invoice_product.tax else [],
+                    "taxes": [{"id": invoice_product.tax.siigo_id}]
+                    if invoice_product.tax
+                    else [],
                 }
                 for invoice_product in invoice.products
             ],
@@ -775,7 +812,9 @@ class SiigoConnector:
                     self.__logger.info(
                         "duplicated_document error. try to send it again"
                     )
-                    raise SystemError("can't send invoice error= duplicated_document")
+                    raise SystemError(
+                        "can't send invoice error= duplicated_document"
+                    )
 
                 elif (
                     response.json()["Errors"][0]["Code"]
@@ -802,9 +841,7 @@ class SiigoConnector:
                     ]
                 else:
                     error_msg = response.json()["Errors"][0]["Code"]
-                    self.__logger.info(
-                        "error sending invoice"
-                    )
+                    self.__logger.info("error sending invoice")
                     raise SystemError(f"error sending invoice {error_msg}")
             else:
                 return
@@ -819,7 +856,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
-            "Partner-Id": "DesarrolloPropio"
+            "Partner-Id": "DesarrolloPropio",
         }
 
         payload = {
@@ -929,7 +966,6 @@ class SiigoConnector:
 
 
 if __name__ == "__main__":
-
     user_name = os.getenv("SIIGO_USER_NAME")
     user_password = os.getenv("SIIGO_ACCESS_KEY")
     PATH = (
