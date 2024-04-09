@@ -147,32 +147,61 @@ def create_pirpos_product(
     products: List[Product] = []
 
     if len(sub_products) == 0:
-
-        products.append(
-            Product(
-                product_id=product_id,
-                name=name,
-                price=location_stock["price"],
-                taxes=[
-                    get_tax_map(configuration, location_stock["tax"]["name"])
-                ],
-            )
-        )
-    else:
-        for sub_product in sub_products:
-            product_id = sub_product["_id"]
+        try:
             products.append(
                 Product(
                     product_id=product_id,
-                    name=sub_product["name"],
-                    price=sub_product["locationsStock"][0]["price"],
+                    name=name,
+                    price=location_stock["price"],
+                    taxes=[
+                        get_tax_map(configuration, location_stock["tax"]["name"])
+                    ],
+                )
+            )
+        except:
+            products.append(
+                Product(
+                    product_id=product_id,
+                    name=name,
+                    price=location_stock["price"],
                     taxes=[
                         get_tax_map(
-                            configuration, location_stock["tax"]["name"]
+                            configuration, location_stock["taxes"][0]["tax"]["name"]
                         )
                     ],
                 )
             )
+
+    else:
+        for sub_product in sub_products:
+            product_id = sub_product["_id"]
+            try:
+                products.append(
+                    Product(
+                        product_id=product_id,
+                        name=sub_product["name"],
+                        price=sub_product["locationsStock"][0]["price"],
+                        taxes=[
+                            get_tax_map(
+                                configuration, location_stock["tax"]["name"]
+                            )
+                        ],
+                    )
+                )
+            except:
+                products.append(
+                    Product(
+                        product_id=product_id,
+                        name=sub_product["name"],
+                        price=sub_product["locationsStock"][0]["price"],
+                        taxes=[
+                            get_tax_map(
+                                configuration, location_stock["taxes"][0]["tax"]["name"]
+                            )
+                        ],
+                    )
+                )
+
     return products
 
 

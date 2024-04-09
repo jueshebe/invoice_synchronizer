@@ -590,7 +590,7 @@ class SiigoConnector:
                     "email": client.email,
                     "phone": {
                         "indicative": "",
-                        "number": client.phone[0:9],
+                        "number": client.phone,
                         "extension": "",
                     },
                 }

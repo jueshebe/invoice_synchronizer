@@ -48,13 +48,13 @@ class Client(BaseModel):
     pirpos_id: Optional[str]
     name: str
     email: str
-    phone: str
-    address: str
+    phone: Optional[str]
+    address: Optional[str]
     document: int
     check_digit: Optional[int]
     document_type: DocumentType
-    responsibilities: Responsibilities
-    city_detail: CityDetail
+    responsibilities: Responsibilities = Responsibilities.R_99_PN
+    city_detail: Optional[CityDetail]
 
     @validator("name")
     @classmethod
