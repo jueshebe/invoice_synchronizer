@@ -820,11 +820,10 @@ class SiigoConnector:
                     response.json()["Errors"][0]["Code"]
                     == "invalid_total_payments"
                 ):
-                    message = response.json()["Errors"][0]["Message"]
+                    message: str = response.json()["Errors"][0]["Message"]
                     self.__logger.warning(message)
-                    pyment = [int(s) for s in re.findall(r"\b\d+\b", message)][
-                        0
-                    ]
+                    pyment = message.split(" ")[-1]
+
                     self.__logger.info(
                         "payment modified from {0} to {1}".format(
                             payload["payments"][0]["value"], pyment
@@ -926,9 +925,10 @@ class SiigoConnector:
                 ):
                     message = response.json()["Errors"][0]["Message"]
                     self.__logger.warning(message)
-                    pyment = [int(s) for s in re.findall(r"\b\d+\b", message)][
-                        0
-                    ]
+                    pyment = message.split(" ")[-1]
+                    # pyment = [float(s) for s in re.findall(r"\b\d+(\.\d+)?\b", message)][
+                    #     0
+                    # ]
                     self.__logger.info(
                         "payment modified from {0} to {1}".format(
                             payload["payments"][0]["value"], pyment
