@@ -46,6 +46,7 @@ class SiigoConnector:
     ):
         """Parameters used to make a connection."""
         # Siigo API info
+        self.__timeout = 120
         self.__logger = logger
         self.__siigo_username = siigo_username
         self.__siigo_access_key = siigo_access_key
@@ -81,7 +82,7 @@ class SiigoConnector:
                 dict_data = json.loads(file.read())
             access_token = dict_data["token"]
             time = datetime.strptime(dict_data["time"], "%Y-%m-%d-%H-%M")
-            if (datetime.now() - time).seconds/3600 < 10:
+            if (datetime.now() - time).total_seconds()/3600 < 10:
                 return access_token
 
         url = "https://api.siigo.com/auth"
@@ -93,7 +94,7 @@ class SiigoConnector:
             "Content-Type": "application/json",
             "Partner-Id": "DesarrolloPropio",
         }
-        response = requests.post(url, data=json.dumps(values), headers=headers)
+        response = requests.post(url, data=json.dumps(values), headers=headers, timeout=self.__timeout)
 
         if not response.ok:
             raise ErrorSiigoToken(
@@ -154,6 +155,7 @@ class SiigoConnector:
                 url.format(page=page),
                 headers=headers,
                 data=payload,
+                timeout=self.__timeout
             )
             if not response.ok:
                 raise ErrorLoadingSiigoClients(
@@ -266,7 +268,8 @@ class SiigoConnector:
                 }
             )
             response = requests.request(
-                "POST", url, headers=headers, data=payload
+                "POST", url, headers=headers, data=payload,
+                timeout=self.__timeout
             )
             if not response.ok:
                 raise ErrorLoadingSiigoProducts("Can't download Siigo Products")
@@ -339,6 +342,7 @@ class SiigoConnector:
                 "GET",
                 url.format(page=page),
                 headers=headers,
+                timeout=self.__timeout
             )
             if not response.ok:
                 if (
@@ -520,6 +524,7 @@ class SiigoConnector:
             url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout
         )
         if not response.ok:
             raise ErrorCreatingSiigoClient(
@@ -604,6 +609,7 @@ class SiigoConnector:
             client_url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout
         )
         if not response.ok:
             raise ErrorUpdatingSiigoClient(
@@ -666,6 +672,7 @@ class SiigoConnector:
             url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout
         )
         if not response.ok:
             raise ErrorCreatingSiigoProduct(
@@ -728,6 +735,7 @@ class SiigoConnector:
             url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout
         )
         if not response.ok:
             raise ErrorUpdatingSiigoProduct(
@@ -797,6 +805,7 @@ class SiigoConnector:
                 url,
                 headers=headers,
                 data=str(payload),
+                timeout=self.__timeout
             )
             if not response.ok:
                 if response.json()["Errors"][0]["Code"] == "already_exists":
@@ -902,6 +911,7 @@ class SiigoConnector:
                 url.format(invoice_id=invoice.siigo_id),
                 headers=headers,
                 data=str(payload),
+                timeout=self.__timeout
             )
             if not response.ok:
                 # if response.json()["Errors"][0]["Code"] == "already_exists":

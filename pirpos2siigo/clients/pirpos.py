@@ -315,9 +315,10 @@ class PirposConnector:
                                     tax_name = tax_info["name"]
                                     break
                             if not tax_name:
-                                raise ValueError(
-                                    "Can't get tax name from pirpos invoice"
-                                )
+                                # TODO: add tax here
+                                tax_name = "I CONSUMO"
+                                invoice_number = f"{invoice_info['invoicePrefix']} {invoice_info['seq']}"
+                                logging.warning(f"Set tax name= I CONSUMO on invoice {invoice_number} product {product}")
                         else:
                             tax_name = None
                         invoice_products.append(
@@ -353,15 +354,15 @@ class PirposConnector:
 
                 except Exception as error:
                     print(
-                        f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}",
+                        f"No se puede leer Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}",
                         f"raise error: {error}",
                     )
-                    raise ErrorLoadingPirposInvoices(
-                        (
-                            f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}"
-                            f"raise error: {error}"
-                        )
-                    ) from error
+                    # raise ErrorLoadingPirposInvoices(
+                    #     (
+                    #         f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}"
+                    #         f"raise error: {error}"
+                    #     )
+                    # ) from error
 
             if time2 >= end_day:
                 break

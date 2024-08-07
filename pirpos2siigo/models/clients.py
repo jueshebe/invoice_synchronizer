@@ -37,6 +37,7 @@ class DocumentType(Enum):
     TIPO_DOCUMENTO_EXTRANJERO = 42
     SIN_IDENTIFICAR = 43
     PEP = 47
+    PPT = 48
     NIT_OTRO_PAIS = 50
     NUIP = 91
 
