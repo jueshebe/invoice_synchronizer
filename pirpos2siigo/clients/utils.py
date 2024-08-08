@@ -62,6 +62,7 @@ def clean_document(document: Union[str, int]) -> int:
         document_str = document_str[: document_str.find("-")]
     return int(document_str)
 
+
 def create_client(
     configuration_file: Pirpos2SiigoMap,
     name: str,
@@ -89,7 +90,9 @@ def create_client(
         email=email if email else default_client.email,
         phone=phone if phone else default_client.phone,
         address=address if address else default_client.address,
-        document=clean_document(document) if document else default_client.document,
+        document=clean_document(document)
+        if document
+        else default_client.document,
         check_digit=check_digit if check_digit else default_client.check_digit,
         document_type=document_type
         if document_type
@@ -117,8 +120,9 @@ def create_client(
     )
 
 
-def get_tax_map(configuration: Pirpos2SiigoMap, name_key: Optional[str]) -> Optional[TaxInfo]:
-
+def get_tax_map(
+    configuration: Pirpos2SiigoMap, name_key: Optional[str]
+) -> Optional[TaxInfo]:
     """Find tax mapping."""
     if not name_key:
         return None
@@ -154,21 +158,28 @@ def create_pirpos_product(
                     name=name,
                     price=location_stock["price"],
                     taxes=[
-                        get_tax_map(configuration, location_stock["tax"]["name"])
+                        get_tax_map(
+                            configuration, location_stock["tax"]["name"]
+                        )
                     ],
                 )
             )
         except:
+            try:
+                taxes = [
+                    get_tax_map(
+                        configuration, location_stock["taxes"][0]["tax"]["name"]
+                    )
+                ]
+            except:
+                taxes = []
+
             products.append(
                 Product(
                     product_id=product_id,
                     name=name,
                     price=location_stock["price"],
-                    taxes=[
-                        get_tax_map(
-                            configuration, location_stock["taxes"][0]["tax"]["name"]
-                        )
-                    ],
+                    taxes=taxes,
                 )
             )
 
@@ -196,7 +207,8 @@ def create_pirpos_product(
                         price=sub_product["locationsStock"][0]["price"],
                         taxes=[
                             get_tax_map(
-                                configuration, location_stock["taxes"][0]["tax"]["name"]
+                                configuration,
+                                location_stock["taxes"][0]["tax"]["name"],
                             )
                         ],
                     )
@@ -243,7 +255,7 @@ def create_invoice(
     payments: List[Tuple[Union[str, int], float]],
     invoice_products: List[Tuple[Product, float, int, Optional[str]]],
     total: float,
-    siigo_id: Optional[str] = None
+    siigo_id: Optional[str] = None,
 ) -> Invoice:
     """Create invoice."""
     return Invoice(
@@ -322,11 +334,14 @@ class ErrorUpdatingSiigoClient(Exception):
 class ErrorCreatingSiigoProduct(Exception):
     """Can't create product."""
 
+
 class ErrorUpdatingSiigoProduct(Exception):
     """Can't update product."""
 
+
 class ErrorCreatingSiigoInvoice(Exception):
     """Can't create invoice."""
+
 
 class ErrorUpdatingSiigoInvoice(Exception):
     """Can't update invoice."""

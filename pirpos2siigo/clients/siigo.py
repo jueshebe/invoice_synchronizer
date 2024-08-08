@@ -411,9 +411,10 @@ class SiigoConnector:
                         product = self.__products[0]
                     quantity = product_info["quantity"]
                     price = int(product_info["total"] / quantity)
-                    if product_info.get("taxes"):
+                    # if product_info.get("taxes"):
+                    try:
                         tax_name = product_info["taxes"][0]["name"]
-                    else:
+                    except:
                         tax_name = None
 
                     invoice_products.append(

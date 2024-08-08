@@ -163,7 +163,7 @@ class Updater:
                 try:
                     self.siigo_client.create_invoice(invoice)
                     self.logger.info(
-                        f"{counter + 1}/{len(missing_invoices)} invoices created"
+                        f"{invoice.invoice_number} | {counter + 1}/{len(missing_invoices)} invoices created"
                     )
                 except Exception as error:
                     failed_invoices.append(invoice)

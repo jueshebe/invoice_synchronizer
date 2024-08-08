@@ -308,19 +308,23 @@ class PirposConnector:
                             product = self.__products[0]
                         price = product_info["price"]
                         quantity = product_info["quantity"]
-                        if len(invoice_info["taxes"]) > 0:
+                        if len(product_info["taxes"]) > 0:
                             tax_name = None
-                            for tax_info in invoice_info["taxes"]:
-                                if tax_info.get("name"):
-                                    tax_name = tax_info["name"]
+                            for tax_info in product_info["taxes"]:
+                                if tax_info.get("taxName"):
+                                    tax_name = tax_info["taxName"]
                                     break
                             if not tax_name:
                                 # TODO: add tax here
-                                tax_name = "I CONSUMO"
-                                invoice_number = f"{invoice_info['invoicePrefix']} {invoice_info['seq']}"
-                                logging.warning(f"Set tax name= I CONSUMO on invoice {invoice_number} product {product}")
+                                pass
+                                # tax_name = "I CONSUMO"
+                                # invoice_number = f"{invoice_info['invoicePrefix']} {invoice_info['seq']}"
+                                # logging.warning(f"Set tax name= I CONSUMO on invoice {invoice_number} product {product}")
                         else:
-                            tax_name = None
+                            try:
+                                tax_name = product.taxes[0].pirpos_name
+                            except:
+                                tax_name = None
                         invoice_products.append(
                             (product, price, quantity, tax_name)
                         )
