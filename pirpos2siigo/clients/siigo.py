@@ -784,7 +784,7 @@ class SiigoConnector:
                     if invoice_product.tax
                     else [],
                 }
-                for invoice_product in invoice.products
+                for invoice_product in invoice.products if invoice_product.price > 0
             ],
             "payments": [
                 {
