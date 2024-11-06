@@ -5,7 +5,7 @@
             "siigo_id": 3025},
         {
             "pirpos_name": "Tarjeta débito",
-            "siigo_id":3027
+            "siigo_id": 3027
         },
         {
             "pirpos_name": "Tarjeta crédito",
@@ -13,7 +13,7 @@
         },
         {
             "pirpos_name": "Transferencia bancaria",
-            "siigo_id": 7300
+            "siigo_id": 8434
         },
         {
             "pirpos_name": "Domicilio",

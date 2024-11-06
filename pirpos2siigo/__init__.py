@@ -33,7 +33,7 @@ siigo_user_password = str(os.getenv("SIIGO_ACCESS_KEY"))
 pirpos_user_name = str(os.getenv("PIRPOS_USER_NAME"))
 pirpos_user_password = str(os.getenv("PIRPOS_PASSWORD"))
 CONFIGURATION_PATH = (
-    "/Users/julianestehe/Programs/personal/asadero/pirpos2siigo/configuration.JSON"
+    "/home/julian/projects/pirpos2siigo/configuration.JSON"
 )
 # CONFIGURATION_PATH = "/home/julian/projects/pirpos2siigo/configuration.JSON"
 
@@ -46,10 +46,10 @@ if __name__ == "__main__":
         siigo_user_name, siigo_user_password, CONFIGURATION_PATH, logger
     )
     updater = Updater(pirpos_connector, siigo_connector, logger)
-    # updater.update_clients()  # TODO:f change page from next_url
-    # updater.update_products()
-    date_1 = datetime(2024, 9, 1)
-    date_2 = datetime(2024, 9, 30)
+    updater.update_clients()  # TODO:f change page from next_url
+    updater.update_products()
+    date_1 = datetime(2024, 10, 1)
+    date_2 = datetime(2024, 10, 31)
     updater.update_invoices(
         date_1, date_2
     )  # TODO: download invoices by x days, not all rang
