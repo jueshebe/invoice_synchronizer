@@ -200,6 +200,7 @@ def create_pirpos_product(
                     )
                 )
             except:
+                tax_name = sub_product["locationsStock"][0]["taxes"][0]["tax"]["name"]
                 products.append(
                     Product(
                         product_id=product_id,
@@ -208,7 +209,7 @@ def create_pirpos_product(
                         taxes=[
                             get_tax_map(
                                 configuration,
-                                location_stock["taxes"][0]["tax"]["name"],
+                                tax_name,
                             )
                         ],
                     )

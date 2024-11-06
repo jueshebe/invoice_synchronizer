@@ -61,7 +61,7 @@ class Updater:
                     "error": str(error),
                     "error_date": str(datetime.now()),
                 }
-                save_error(error_data, "clients_errors.json")
+                save_error(error_data, "../clients_errors.json")
 
         for counter, difference_data in enumerate(outdated_clients):
             try:
@@ -78,7 +78,7 @@ class Updater:
                     "client": json.loads(difference_data[0].json()),
                     "error": str(error),
                 }
-                save_error(error_data, "clients_error.json")
+                save_error(error_data, "../clients_error.json")
 
     def update_products(self) -> None:
         """Update and create products on siigo from pirpos data."""
@@ -112,7 +112,7 @@ class Updater:
                     "error": str(error),
                     "error_date": str(datetime.now()),
                 }
-                save_error(error_data, "products_error.json")
+                save_error(error_data, "../products_error.json")
 
         for counter, difference_data in enumerate(outdated_products):
             try:
@@ -130,7 +130,7 @@ class Updater:
                     "client": json.loads(difference_data[0].json()),
                     "error": str(error),
                 }
-                save_error(error_data, "products_error.json")
+                save_error(error_data, "../products_error.json")
 
     def update_invoices(self, init_date: datetime, end_day: datetime) -> None:
         """Update and create invoices on siigo from pirpos data."""
@@ -202,4 +202,4 @@ class Updater:
                     "invoice": json.loads(difference_data[0].json()),
                     "error": str(error),
                 }
-                save_error(error_data, "invoices_error.json")
+                save_error(error_data, "../invoices_error.json")

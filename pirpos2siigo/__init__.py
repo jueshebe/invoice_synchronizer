@@ -20,6 +20,12 @@ logStreamFormatter = logging.Formatter(
 consoleHandler = logging.StreamHandler(stream=sys.stdout)
 consoleHandler.setFormatter(logStreamFormatter)
 consoleHandler.setLevel(level=logging.DEBUG)
+
+file_handler= logging.FileHandler(filename="../logs.txt")
+file_handler.setFormatter(logStreamFormatter)
+file_handler.setLevel(level=logging.DEBUG)
+
+logger.addHandler(file_handler)
 logger.addHandler(consoleHandler)
 
 siigo_user_name = str(os.getenv("SIIGO_USER_NAME"))
@@ -42,8 +48,8 @@ if __name__ == "__main__":
     updater = Updater(pirpos_connector, siigo_connector, logger)
     # updater.update_clients()  # TODO:f change page from next_url
     # updater.update_products()
-    date_1 = datetime(2024, 8, 1)
-    date_2 = datetime(2024, 8, 31)
+    date_1 = datetime(2024, 9, 1)
+    date_2 = datetime(2024, 9, 30)
     updater.update_invoices(
         date_1, date_2
     )  # TODO: download invoices by x days, not all rang
