@@ -853,11 +853,31 @@ class SiigoConnector:
                     self.__logger.info("error sending invoice")
                     raise SystemError(f"error sending invoice {error_msg}")
             else:
+                json = response.json()
+                invoice.siigo_id = json["id"]
                 return
 
         raise ErrorCreatingSiigoInvoice(
             f"Can't create invoice\n {response.text}"
         )
+
+    def cancel_invoice(self, invoice: Invoice) -> None:
+        """Cancel inovoice."""
+        url = f"https://api.siigo.com/v1/invoices/{invoice.siigo_id}/annul"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
+        }
+        response = requests.request(
+            "POST",
+            url,
+            headers=headers,
+            timeout=self.__timeout
+        )
+        if not response.ok:
+            raise ErrorUpdatingSiigoInvoice("Can't cancel invoice")
+
 
     def update_invoice(self, invoice: Invoice) -> None:
         """Create invoice."""

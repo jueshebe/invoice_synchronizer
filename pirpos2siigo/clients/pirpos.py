@@ -7,7 +7,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 import requests
-from pirpos2siigo.models import Client, Product, Invoice
+from pirpos2siigo.models import Client, Product, Invoice, InvoiceStatus
 from pirpos2siigo.clients.utils import (
     load_pirpos2siigo_config,
     create_client,
@@ -194,7 +194,7 @@ class PirposConnector:
         self.__products = products
 
     def get_pirpos_invoices_per_client(
-        self, init_day: datetime, end_day: datetime, step_days: int = 10
+        self, init_day: datetime, end_day: datetime, step_days: int = 10, status: InvoiceStatus = InvoiceStatus.PAID
     ) -> List[Invoice]:
         """Get invoices per client on pirpos.
 
@@ -250,7 +250,7 @@ class PirposConnector:
             date2_str = datetime.strftime(time2, "%Y-%m-%dT%H:%M:%S.000Z")
             url = (
                 f"https://api.pirpos.com/reports/reportSalesInvoices?"
-                f"status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
+                f"status={status}&dateInit={date1_str}&dateEnd={date2_str}&"
             )
             response = requests.request("GET", url, headers=headers)
             if not response.ok:
@@ -353,6 +353,7 @@ class PirposConnector:
                         ],
                         invoice_products=invoice_products,
                         total=invoice_info["total"],
+                        invoice_status=status,
                     )
                     invoices_per_client.append(invoice_obj)
 
@@ -372,6 +373,7 @@ class PirposConnector:
                 break
 
         return invoices_per_client
+
 
     @property
     def clients(self) -> List[Client]:

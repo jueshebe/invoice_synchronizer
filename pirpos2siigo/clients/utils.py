@@ -13,6 +13,7 @@ from pirpos2siigo.models import (
     Payment,
     Employee,
     InvoiceProduct,
+    InvoiceStatus,
 )
 
 
@@ -257,6 +258,7 @@ def create_invoice(
     invoice_products: List[Tuple[Product, float, int, Optional[str]]],
     total: float,
     siigo_id: Optional[str] = None,
+    invoice_status: InvoiceStatus = InvoiceStatus.PAID
 ) -> Invoice:
     """Create invoice."""
     return Invoice(
@@ -285,6 +287,7 @@ def create_invoice(
             for invoice_product in invoice_products
         ],
         total=total,
+        status=invoice_status
     )
 
 
