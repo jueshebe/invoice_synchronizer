@@ -240,6 +240,7 @@ def filter_only_deleted_invoices(
 
         try:
             needed_invoice = list(filter(filter_invoice, siigo_invoices))[0]
+            needed_invoice.anulated_date = pirpos_invoice.anulated_date
             required_invoices.append(needed_invoice)
         except Exception as error:
             invoice_numer = f"{pirpos_invoice.invoice_prefix.siigo_id}{pirpos_invoice.invoice_number}"

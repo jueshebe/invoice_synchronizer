@@ -201,7 +201,9 @@ def create_pirpos_product(
                     )
                 )
             except:
-                tax_name = sub_product["locationsStock"][0]["taxes"][0]["tax"]["name"]
+                tax_name = sub_product["locationsStock"][0]["taxes"][0]["tax"][
+                    "name"
+                ]
                 products.append(
                     Product(
                         product_id=product_id,
@@ -252,13 +254,14 @@ def create_invoice(
     seller_id: str,
     client: Client,
     created_on: datetime,
+    deleted_time: Optional[datetime],
     invoice_prefix: str,
     invoice_number: int,
     payments: List[Tuple[Union[str, int], float]],
     invoice_products: List[Tuple[Product, float, int, Optional[str]]],
     total: float,
     siigo_id: Optional[str] = None,
-    invoice_status: InvoiceStatus = InvoiceStatus.PAID
+    invoice_status: InvoiceStatus = InvoiceStatus.PAID,
 ) -> Invoice:
     """Create invoice."""
     return Invoice(
@@ -267,6 +270,7 @@ def create_invoice(
         seller=Employee(name=seller_name, employee_id=seller_id),
         client=client,
         created_on=created_on,
+        anulated_date=deleted_time,
         invoice_prefix=get_prefix_map(configuration, invoice_prefix),
         invoice_number=invoice_number,
         payment_method=[
@@ -287,7 +291,7 @@ def create_invoice(
             for invoice_product in invoice_products
         ],
         total=total,
-        status=invoice_status
+        status=invoice_status,
     )
 
 
@@ -349,3 +353,45 @@ class ErrorCreatingSiigoInvoice(Exception):
 
 class ErrorUpdatingSiigoInvoice(Exception):
     """Can't update invoice."""
+
+
+def get_payload_credit_note(invoice: Invoice) -> Dict[str, Any]:
+    items = []
+    invoice_price = 0
+    for product in invoice.products:
+        price = round(
+            product.price / (1 + (product.tax.value if product.tax else 0)), 6
+        )
+        invoice_price += product.price * product.quantity
+        item = {
+            "code": product.product.product_id,
+            "quantity": product.quantity,
+            "description": product.product.name,
+            "price": price,
+            "taxes": [{"id": product.tax.siigo_id}] if product.tax else [],
+        }
+        items.append(item)
+
+    payments = []
+    registed_payments = 0
+    for payment in invoice.payment_method:
+        product_payment = {
+            "id": payment[0].siigo_id,
+            "value": payment[1],
+            "due_date": invoice.created_on.strftime("%Y-%m-%d"),
+        }
+        registed_payments += payment[1]
+        payments.append(product_payment)
+
+    difference = invoice_price - registed_payments
+    payments[-1]["value"] += difference
+
+    payload = {
+        "document": {"id": 13143},
+        "date": invoice.anulated_date.strftime("%Y-%m-%d"),
+        "invoice": invoice.siigo_id,
+        "reason": "2",
+        "items": items,
+        "payments": payments
+    }
+    return payload

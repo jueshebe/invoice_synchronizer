@@ -155,7 +155,6 @@ class Updater:
         for ref_invoice in ref_invoices:
             total += ref_invoice.total
 
-
         for counter, difference_data in enumerate(outdated_invoices):
             invoice = difference_data[0]
             try:
@@ -207,7 +206,6 @@ class Updater:
             if len(missing_invoices) == 0:
                 break
 
-
     def update_canceled_invoices(
         self, init_date: datetime, end_day: datetime
     ) -> None:
@@ -219,7 +217,6 @@ class Updater:
             init_date, end_day
         )
 
-        # get missing and ourdated clients
         (
             missing_invoices,
             outdated_invoices,
@@ -265,16 +262,20 @@ class Updater:
         unchecked_invoices = self.siigo_client.get_siigo_invoices(
             init_date, end_day
         )
+
+
         invoices_to_delete = filter_only_deleted_invoices(
             ref_invoices, unchecked_invoices
         )
+
+        failed_invoices = []
         for _ in range(4):
-            failed_invoices = []
             for counter, invoice in enumerate(invoices_to_delete):
                 try:
-                    self.siigo_client.cancel_invoice(invoice)
+                    # self.siigo_client.remove_invoice(invoice)
+                    self.siigo_client.credit_note(invoice)
                     self.logger.info(
-                        f"{invoice.invoice_number} | {counter + 1}/{len(ref_invoices)} invoices deleted"
+                        f"{invoice.invoice_number} | {counter + 1}/{len(ref_invoices)} invoices with credit note"
                     )
                 except Exception as error:
                     failed_invoices.append(invoice)
@@ -283,3 +284,5 @@ class Updater:
                     )
             if len(failed_invoices) == 0:
                 break
+            else:
+                invoices_to_delete = copy(failed_invoices)

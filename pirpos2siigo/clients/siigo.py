@@ -31,6 +31,7 @@ from pirpos2siigo.clients.utils import (
     ErrorUpdatingSiigoClient,
     ErrorUpdatingSiigoProduct,
     ErrorUpdatingSiigoInvoice,
+    get_payload_credit_note
 )
 
 
@@ -431,6 +432,7 @@ class SiigoConnector:
                     created_on=datetime.strptime(
                         invoice_info["date"], "%Y-%m-%d"
                     ),
+                    deleted_time=None,
                     invoice_prefix=invoice_info["document"]["id"],
                     invoice_number=invoice_info["number"],
                     payments=[
@@ -777,7 +779,7 @@ class SiigoConnector:
                                 else 0
                             )
                         ),
-                        2,
+                        6,
                     ),
                     "discount": 0,
                     "taxes": [{"id": invoice_product.tax.siigo_id}]
@@ -877,6 +879,42 @@ class SiigoConnector:
         )
         if not response.ok:
             raise ErrorUpdatingSiigoInvoice("Can't cancel invoice")
+
+    def remove_invoice(self, invoice: Invoice) -> None:
+        """Cancel inovoice."""
+        url = f"https://api.siigo.com/v1/invoices/{invoice.siigo_id}"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
+        }
+        response = requests.request(
+            "DELETE",
+            url,
+            headers=headers,
+            timeout=self.__timeout
+        )
+        if not response.ok:
+            raise ErrorUpdatingSiigoInvoice("Can't cancel invoice")
+
+    def credit_note(self, invoice: Invoice) -> None:
+        """Anulate invoice by credit note."""
+        url = "https://api.siigo.com/v1/credit-notes"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
+        }
+        payload = get_payload_credit_note(invoice)
+        response = requests.request(
+            "POST",
+            url,
+            headers=headers,
+            data=str(payload),
+            timeout=self.__timeout
+        )
+        if not response.ok:
+            raise ErrorUpdatingSiigoInvoice(f"Can't cancel invoice {response.text}")
 
 
     def update_invoice(self, invoice: Invoice) -> None:

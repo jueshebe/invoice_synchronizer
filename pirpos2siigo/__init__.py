@@ -49,27 +49,27 @@ if __name__ == "__main__":
     updater = Updater(pirpos_connector, siigo_connector, logger)
     # updater.update_clients()  # TODO:f change page from next_url
     # updater.update_products()
-    date_1 = datetime(2024, 1, 1)
-    date_2 = datetime(2024, 12, 31)
+    date_1 = datetime(2025, 2, 1)
+    date_2 = datetime(2025, 2, 28)
     # updater.update_invoices(
     #     date_1, date_2
     # )  # TODO: download invoices by x days, not all rang
-    # updater.update_canceled_invoices(date_1, date_2)
+    updater.update_canceled_invoices(date_1, date_2)
 
 
-    invoices = pirpos_connector.get_pirpos_invoices_per_client(
-        init_day=date_1, end_day=date_2, status=InvoiceStatus.CANCELED
-    )
-    dict_invoices = [
-        {
-            "FECHA": invoice.created_on,
-            "PREFIJO": invoice.invoice_prefix.prefix,
-            "NUMERO": invoice.invoice_number,
-            "DOCUMENTO": invoice.client.document,
-            "VALOR FACTURA": invoice.total,
-        }
-        for invoice in invoices if invoice.payment_method
-    ]
-    invoices_df = pd.DataFrame(dict_invoices)
-    invoices_df.to_csv("invoices.csv")
-    print()
+    # invoices = pirpos_connector.get_pirpos_invoices_per_client(
+    #     init_day=date_1, end_day=date_2, status=InvoiceStatus.CANCELED
+    # )
+    # dict_invoices = [
+    #     {
+    #         "FECHA": invoice.created_on,
+    #         "PREFIJO": invoice.invoice_prefix.prefix,
+    #         "NUMERO": invoice.invoice_number,
+    #         "DOCUMENTO": invoice.client.document,
+    #         "VALOR FACTURA": invoice.total,
+    #     }
+    #     for invoice in invoices if invoice.payment_method
+    # ]
+    # invoices_df = pd.DataFrame(dict_invoices)
+    # invoices_df.to_csv("invoices.csv")
+    # print()

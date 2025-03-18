@@ -263,6 +263,15 @@ class PirposConnector:
 
             for invoice_info in data:
                 try:
+                    deleted_time_raw = invoice_info.get("canceled", {}).get("date")
+                    
+                    if deleted_time_raw:
+                        deleted_time = datetime.strptime(
+                            deleted_time_raw, "%Y-%m-%dT%H:%M:%S.%fZ"
+                        ) - timedelta(hours=5)
+                    else:
+                        deleted_time = None
+
                     # select client
                     client_document_str = str(
                         invoice_info["client"].get("document", "0")
@@ -340,6 +349,7 @@ class PirposConnector:
                         seller_id=invoice_info["seller"]["idInternal"],
                         client=client,
                         created_on=created_on,
+                        deleted_time=deleted_time,
                         invoice_prefix=invoice_info["invoicePrefix"],
                         invoice_number=invoice_info["seq"],
                         payments=[

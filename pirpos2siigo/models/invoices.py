@@ -57,6 +57,7 @@ class Invoice(BaseModel):
     seller: Employee
     client: Client
     created_on: datetime
+    anulated_date: Optional[datetime] = None
     invoice_prefix: Prefix
     invoice_number: int
     payment_method: List[Tuple[Payment, float]]
