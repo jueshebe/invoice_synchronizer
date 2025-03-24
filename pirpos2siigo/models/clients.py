@@ -37,6 +37,7 @@ class DocumentType(Enum):
     TIPO_DOCUMENTO_EXTRANJERO = 42
     SIN_IDENTIFICAR = 43
     PEP = 47
+    PPT = 48
     NIT_OTRO_PAIS = 50
     NUIP = 91
 
@@ -48,13 +49,13 @@ class Client(BaseModel):
     pirpos_id: Optional[str]
     name: str
     email: str
-    phone: str
-    address: str
+    phone: Optional[str]
+    address: Optional[str]
     document: int
     check_digit: Optional[int]
     document_type: DocumentType
-    responsibilities: Responsibilities
-    city_detail: CityDetail
+    responsibilities: Responsibilities = Responsibilities.R_99_PN
+    city_detail: Optional[CityDetail]
 
     @validator("name")
     @classmethod

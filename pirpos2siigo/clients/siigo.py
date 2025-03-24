@@ -1,6 +1,7 @@
 """Siigo client."""
 from typing import List, Tuple
 import os
+import json
 import re
 import time
 import json
@@ -30,6 +31,7 @@ from pirpos2siigo.clients.utils import (
     ErrorUpdatingSiigoClient,
     ErrorUpdatingSiigoProduct,
     ErrorUpdatingSiigoInvoice,
+    get_payload_credit_note
 )
 
 
@@ -45,6 +47,7 @@ class SiigoConnector:
     ):
         """Parameters used to make a connection."""
         # Siigo API info
+        self.__timeout = 120
         self.__logger = logger
         self.__siigo_username = siigo_username
         self.__siigo_access_key = siigo_access_key
@@ -70,13 +73,29 @@ class SiigoConnector:
             access_token
 
         """
+        path_folder = os.path.join(
+            os.path.expanduser("~"), ".config/pirpos2siigo"
+        )
+        file_path = os.path.join(path_folder, "token.json")
+        os.makedirs(path_folder, exist_ok=True)
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as file:
+                dict_data = json.loads(file.read())
+            access_token = dict_data["token"]
+            time = datetime.strptime(dict_data["time"], "%Y-%m-%d-%H-%M")
+            if (datetime.now() - time).total_seconds()/3600 < 10:
+                return access_token
+
         url = "https://api.siigo.com/auth"
         values = {
             "username": self.__siigo_username,
             "access_key": self.__siigo_access_key,
         }
-        headers = {"Content-Type": "application/json; charset=UTF-8"}
-        response = requests.post(url, data=json.dumps(values), headers=headers)
+        headers = {
+            "Content-Type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
+        }
+        response = requests.post(url, data=json.dumps(values), headers=headers, timeout=self.__timeout)
 
         if not response.ok:
             raise ErrorSiigoToken(
@@ -91,6 +110,15 @@ class SiigoConnector:
             raise ErrorSiigoToken(
                 "access_token key is not present in the respose"
             )
+
+        with open(file_path, "w", encoding="utf-8") as file:
+            json_data = json.dumps(
+                {
+                    "token": access_token,
+                    "time": datetime.now().strftime("%Y-%m-%d-%H-%M"),
+                }
+            )
+            file.write(json_data)
 
         return access_token
 
@@ -117,6 +145,7 @@ class SiigoConnector:
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio",
         }
         page = 1
         clients: List[Client] = []
@@ -127,6 +156,7 @@ class SiigoConnector:
                 url.format(page=page),
                 headers=headers,
                 data=payload,
+                timeout=self.__timeout
             )
             if not response.ok:
                 raise ErrorLoadingSiigoClients(
@@ -145,7 +175,7 @@ class SiigoConnector:
                     contacts = client_data.get("contacts")[0]
                 else:
                     contacts = {}
-                
+
                 try:
                     name = " ".join(client_data["name"])
                 except TypeError as error:
@@ -206,6 +236,7 @@ class SiigoConnector:
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            # "Partner-Id": "DesarrolloPropio",
         }
 
         page = 0
@@ -238,7 +269,8 @@ class SiigoConnector:
                 }
             )
             response = requests.request(
-                "POST", url, headers=headers, data=payload
+                "POST", url, headers=headers, data=payload,
+                timeout=self.__timeout
             )
             if not response.ok:
                 raise ErrorLoadingSiigoProducts("Can't download Siigo Products")
@@ -300,6 +332,7 @@ class SiigoConnector:
         headers = {
             "Authorization": self.__siigo_access_token,
             "Content-Type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
         }
 
         page = 1
@@ -310,9 +343,13 @@ class SiigoConnector:
                 "GET",
                 url.format(page=page),
                 headers=headers,
+                timeout=self.__timeout
             )
             if not response.ok:
-                if response.json()["Errors"][0]["Code"] == "document_query_service":
+                if (
+                    response.json()["Errors"][0]["Code"]
+                    == "document_query_service"
+                ):
                     continue
                 raise ErrorLoadingSiigoInvoices(
                     f"Can't download Siigo invoices\n {response.text}"
@@ -320,7 +357,9 @@ class SiigoConnector:
 
             response_ob = response.json()
             data = response_ob["results"]
-            next_link = response_ob["_links"].get("next", {"href": None})["href"]
+            next_link = response_ob["_links"].get("next", {"href": None})[
+                "href"
+            ]
             if len(data) == 0:
                 break
             if next_link is None:
@@ -329,7 +368,6 @@ class SiigoConnector:
                 url = next_link
 
             for invoice_info in data:
-
                 # select client
                 client_document_str = str(
                     invoice_info.get("customer", {}).get("identification", "0")
@@ -374,9 +412,10 @@ class SiigoConnector:
                         product = self.__products[0]
                     quantity = product_info["quantity"]
                     price = int(product_info["total"] / quantity)
-                    if product_info.get("taxes"):
+                    # if product_info.get("taxes"):
+                    try:
                         tax_name = product_info["taxes"][0]["name"]
-                    else:
+                    except:
                         tax_name = None
 
                     invoice_products.append(
@@ -393,6 +432,7 @@ class SiigoConnector:
                     created_on=datetime.strptime(
                         invoice_info["date"], "%Y-%m-%d"
                     ),
+                    deleted_time=None,
                     invoice_prefix=invoice_info["document"]["id"],
                     invoice_number=invoice_info["number"],
                     payments=[
@@ -420,6 +460,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio",
         }
 
         full_name = client.name.split(" ")
@@ -486,6 +527,7 @@ class SiigoConnector:
             url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout
         )
         if not response.ok:
             raise ErrorCreatingSiigoClient(
@@ -504,6 +546,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio",
         }
 
         full_name = client.name.split(" ")
@@ -555,7 +598,7 @@ class SiigoConnector:
                     "email": client.email,
                     "phone": {
                         "indicative": "",
-                        "number": client.phone[0:10],
+                        "number": client.phone,
                         "extension": "",
                     },
                 }
@@ -569,6 +612,7 @@ class SiigoConnector:
             client_url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout
         )
         if not response.ok:
             raise ErrorUpdatingSiigoClient(
@@ -587,6 +631,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
         }
         if len(product.taxes) > 0:
             tax = [{"id": product.taxes[0].siigo_id}]
@@ -630,6 +675,7 @@ class SiigoConnector:
             url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout
         )
         if not response.ok:
             raise ErrorCreatingSiigoProduct(
@@ -648,6 +694,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
         }
         if len(product.taxes) > 0:
             tax = [{"id": product.taxes[0].siigo_id}]
@@ -691,6 +738,7 @@ class SiigoConnector:
             url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout
         )
         if not response.ok:
             raise ErrorUpdatingSiigoProduct(
@@ -703,6 +751,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
         }
 
         payload = {
@@ -721,13 +770,23 @@ class SiigoConnector:
                     "description": invoice_product.product.name,
                     "quantity": invoice_product.quantity,
                     "price": round(
-                        invoice_product.price / (1 + (invoice_product.tax.value if invoice_product.tax else 0)),
-                        2,
+                        invoice_product.price
+                        / (
+                            1
+                            + (
+                                invoice_product.tax.value
+                                if invoice_product.tax
+                                else 0
+                            )
+                        ),
+                        6,
                     ),
                     "discount": 0,
-                    "taxes": [{"id": invoice_product.tax.siigo_id}] if invoice_product.tax else [],
+                    "taxes": [{"id": invoice_product.tax.siigo_id}]
+                    if invoice_product.tax
+                    else [],
                 }
-                for invoice_product in invoice.products
+                for invoice_product in invoice.products if invoice_product.price > 0
             ],
             "payments": [
                 {
@@ -749,6 +808,7 @@ class SiigoConnector:
                 url,
                 headers=headers,
                 data=str(payload),
+                timeout=self.__timeout
             )
             if not response.ok:
                 if response.json()["Errors"][0]["Code"] == "already_exists":
@@ -764,17 +824,18 @@ class SiigoConnector:
                     self.__logger.info(
                         "duplicated_document error. try to send it again"
                     )
-                    raise SystemError("can't send invoice error= duplicated_document")
+                    raise SystemError(
+                        "can't send invoice error= duplicated_document"
+                    )
 
                 elif (
                     response.json()["Errors"][0]["Code"]
                     == "invalid_total_payments"
                 ):
-                    message = response.json()["Errors"][0]["Message"]
+                    message: str = response.json()["Errors"][0]["Message"]
                     self.__logger.warning(message)
-                    pyment = [int(s) for s in re.findall(r"\b\d+\b", message)][
-                        0
-                    ]
+                    pyment = message.split(" ")[-1]
+
                     self.__logger.info(
                         "payment modified from {0} to {1}".format(
                             payload["payments"][0]["value"], pyment
@@ -791,16 +852,70 @@ class SiigoConnector:
                     ]
                 else:
                     error_msg = response.json()["Errors"][0]["Code"]
-                    self.__logger.info(
-                        "error sending invoice"
-                    )
+                    self.__logger.info("error sending invoice")
                     raise SystemError(f"error sending invoice {error_msg}")
             else:
+                json = response.json()
+                invoice.siigo_id = json["id"]
                 return
 
         raise ErrorCreatingSiigoInvoice(
             f"Can't create invoice\n {response.text}"
         )
+
+    def cancel_invoice(self, invoice: Invoice) -> None:
+        """Cancel inovoice."""
+        url = f"https://api.siigo.com/v1/invoices/{invoice.siigo_id}/annul"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
+        }
+        response = requests.request(
+            "POST",
+            url,
+            headers=headers,
+            timeout=self.__timeout
+        )
+        if not response.ok:
+            raise ErrorUpdatingSiigoInvoice("Can't cancel invoice")
+
+    def remove_invoice(self, invoice: Invoice) -> None:
+        """Cancel inovoice."""
+        url = f"https://api.siigo.com/v1/invoices/{invoice.siigo_id}"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
+        }
+        response = requests.request(
+            "DELETE",
+            url,
+            headers=headers,
+            timeout=self.__timeout
+        )
+        if not response.ok:
+            raise ErrorUpdatingSiigoInvoice("Can't cancel invoice")
+
+    def credit_note(self, invoice: Invoice) -> None:
+        """Anulate invoice by credit note."""
+        url = "https://api.siigo.com/v1/credit-notes"
+        headers = {
+            "authorization": self.__siigo_access_token,
+            "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
+        }
+        payload = get_payload_credit_note(invoice)
+        response = requests.request(
+            "POST",
+            url,
+            headers=headers,
+            data=str(payload),
+            timeout=self.__timeout
+        )
+        if not response.ok:
+            raise ErrorUpdatingSiigoInvoice(f"Can't cancel invoice {response.text}")
+
 
     def update_invoice(self, invoice: Invoice) -> None:
         """Create invoice."""
@@ -808,6 +923,7 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
         }
 
         payload = {
@@ -854,6 +970,7 @@ class SiigoConnector:
                 url.format(invoice_id=invoice.siigo_id),
                 headers=headers,
                 data=str(payload),
+                timeout=self.__timeout
             )
             if not response.ok:
                 # if response.json()["Errors"][0]["Code"] == "already_exists":
@@ -877,9 +994,10 @@ class SiigoConnector:
                 ):
                     message = response.json()["Errors"][0]["Message"]
                     self.__logger.warning(message)
-                    pyment = [int(s) for s in re.findall(r"\b\d+\b", message)][
-                        0
-                    ]
+                    pyment = message.split(" ")[-1]
+                    # pyment = [float(s) for s in re.findall(r"\b\d+(\.\d+)?\b", message)][
+                    #     0
+                    # ]
                     self.__logger.info(
                         "payment modified from {0} to {1}".format(
                             payload["payments"][0]["value"], pyment
@@ -917,7 +1035,6 @@ class SiigoConnector:
 
 
 if __name__ == "__main__":
-
     user_name = os.getenv("SIIGO_USER_NAME")
     user_password = os.getenv("SIIGO_ACCESS_KEY")
     PATH = (

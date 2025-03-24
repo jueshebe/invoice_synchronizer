@@ -7,7 +7,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 import requests
-from pirpos2siigo.models import Client, Product, Invoice
+from pirpos2siigo.models import Client, Product, Invoice, InvoiceStatus
 from pirpos2siigo.clients.utils import (
     load_pirpos2siigo_config,
     create_client,
@@ -194,7 +194,7 @@ class PirposConnector:
         self.__products = products
 
     def get_pirpos_invoices_per_client(
-        self, init_day: datetime, end_day: datetime, step_days: int = 10
+        self, init_day: datetime, end_day: datetime, step_days: int = 10, status: InvoiceStatus = InvoiceStatus.PAID
     ) -> List[Invoice]:
         """Get invoices per client on pirpos.
 
@@ -250,7 +250,7 @@ class PirposConnector:
             date2_str = datetime.strftime(time2, "%Y-%m-%dT%H:%M:%S.000Z")
             url = (
                 f"https://api.pirpos.com/reports/reportSalesInvoices?"
-                f"status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
+                f"status={status}&dateInit={date1_str}&dateEnd={date2_str}&"
             )
             response = requests.request("GET", url, headers=headers)
             if not response.ok:
@@ -263,6 +263,15 @@ class PirposConnector:
 
             for invoice_info in data:
                 try:
+                    deleted_time_raw = invoice_info.get("canceled", {}).get("date")
+                    
+                    if deleted_time_raw:
+                        deleted_time = datetime.strptime(
+                            deleted_time_raw, "%Y-%m-%dT%H:%M:%S.%fZ"
+                        ) - timedelta(hours=5)
+                    else:
+                        deleted_time = None
+
                     # select client
                     client_document_str = str(
                         invoice_info["client"].get("document", "0")
@@ -308,18 +317,23 @@ class PirposConnector:
                             product = self.__products[0]
                         price = product_info["price"]
                         quantity = product_info["quantity"]
-                        if len(invoice_info["taxes"]) > 0:
+                        if len(product_info["taxes"]) > 0:
                             tax_name = None
-                            for tax_info in invoice_info["taxes"]:
-                                if tax_info.get("name"):
-                                    tax_name = tax_info["name"]
+                            for tax_info in product_info["taxes"]:
+                                if tax_info.get("taxName"):
+                                    tax_name = tax_info["taxName"]
                                     break
                             if not tax_name:
-                                raise ValueError(
-                                    "Can't get tax name from pirpos invoice"
-                                )
+                                # TODO: add tax here
+                                pass
+                                # tax_name = "I CONSUMO"
+                                # invoice_number = f"{invoice_info['invoicePrefix']} {invoice_info['seq']}"
+                                # logging.warning(f"Set tax name= I CONSUMO on invoice {invoice_number} product {product}")
                         else:
-                            tax_name = None
+                            try:
+                                tax_name = product.taxes[0].pirpos_name
+                            except:
+                                tax_name = None
                         invoice_products.append(
                             (product, price, quantity, tax_name)
                         )
@@ -335,6 +349,7 @@ class PirposConnector:
                         seller_id=invoice_info["seller"]["idInternal"],
                         client=client,
                         created_on=created_on,
+                        deleted_time=deleted_time,
                         invoice_prefix=invoice_info["invoicePrefix"],
                         invoice_number=invoice_info["seq"],
                         payments=[
@@ -348,25 +363,27 @@ class PirposConnector:
                         ],
                         invoice_products=invoice_products,
                         total=invoice_info["total"],
+                        invoice_status=status,
                     )
                     invoices_per_client.append(invoice_obj)
 
                 except Exception as error:
                     print(
-                        f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}",
+                        f"No se puede leer Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}",
                         f"raise error: {error}",
                     )
-                    raise ErrorLoadingPirposInvoices(
-                        (
-                            f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}"
-                            f"raise error: {error}"
-                        )
-                    ) from error
+                    # raise ErrorLoadingPirposInvoices(
+                    #     (
+                    #         f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}"
+                    #         f"raise error: {error}"
+                    #     )
+                    # ) from error
 
             if time2 >= end_day:
                 break
 
         return invoices_per_client
+
 
     @property
     def clients(self) -> List[Client]:

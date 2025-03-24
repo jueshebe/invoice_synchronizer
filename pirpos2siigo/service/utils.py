@@ -111,7 +111,6 @@ def get_missing_outdated_products(
                 key not in ["siigo_id", "product_id"]
                 and unchecked_dict[key] != ref_dict[key]
             ):
-
                 ref_product.siigo_id = unchecked_product.siigo_id
                 difference = {key: unchecked_dict[key]}
                 outdated_products.append((ref_product, difference))
@@ -132,7 +131,7 @@ def get_missing_outdated_invoices(
 
     ref_invoices_numbers: List[str] = [
         f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
-        for invoice in ref_invoices 
+        for invoice in ref_invoices
     ]
 
     missing_invoices = [
@@ -162,7 +161,8 @@ def get_missing_outdated_invoices(
         def filter_outdated_invoice(invoice: Invoice) -> bool:
             """Get outdated_invoices."""
             return (
-                invoice.invoice_prefix.siigo_id == ref_invoice.invoice_prefix.siigo_id
+                invoice.invoice_prefix.siigo_id
+                == ref_invoice.invoice_prefix.siigo_id
                 and invoice.invoice_number == ref_invoice.invoice_number
             )
 
@@ -176,14 +176,28 @@ def get_missing_outdated_invoices(
         ref_dict = ref_invoice.dict()
         for key in ref_dict:
             if (
-                key not in ["siigo_id", "invoice_prefix", "cachier", "seller", "products", "payment_method"]  # TODO: Make better this check
+                key
+                not in [
+                    "siigo_id",
+                    "invoice_prefix",
+                    "cachier",
+                    "seller",
+                    "products",
+                    "payment_method",
+                ]  # TODO: Make better this check
                 and unchecked_dict[key] != ref_dict[key]
             ):
                 if key == "client":
-                    if unchecked_invoice.client.document == ref_invoice.client.document:
+                    if (
+                        unchecked_invoice.client.document
+                        == ref_invoice.client.document
+                    ):
                         continue
                 if key == "created_on":
-                    if unchecked_invoice.created_on.date() == ref_invoice.created_on.date():
+                    if (
+                        unchecked_invoice.created_on.date()
+                        == ref_invoice.created_on.date()
+                    ):
                         continue
 
                 ref_invoice.siigo_id = unchecked_invoice.siigo_id
@@ -207,6 +221,32 @@ def save_error(error_data: Dict[str, str], file_name: str) -> None:
 
     with open(file_name, "w", encoding="utf-8") as json_file:
         json_file.write(json.dumps(clients_errors, indent=4))
+
+
+def filter_only_deleted_invoices(
+    pirpos_invoices: List[Invoice], siigo_invoices: List[Invoice]
+) -> List[Invoice]:
+    """Filter only deleted invoices."""
+    required_invoices = []
+    for pirpos_invoice in pirpos_invoices:
+
+        def filter_invoice(invoice: Invoice) -> bool:
+            """Filter only deleted invoices."""
+            return (
+                invoice.invoice_number == pirpos_invoice.invoice_number
+                and invoice.invoice_prefix.siigo_id
+                == pirpos_invoice.invoice_prefix.siigo_id
+            )
+
+        try:
+            needed_invoice = list(filter(filter_invoice, siigo_invoices))[0]
+            needed_invoice.anulated_date = pirpos_invoice.anulated_date
+            required_invoices.append(needed_invoice)
+        except Exception as error:
+            invoice_numer = f"{pirpos_invoice.invoice_prefix.siigo_id}{pirpos_invoice.invoice_number}"
+            print(f"Error filtering invoice {invoice_numer}: {error}")
+
+    return required_invoices
 
 
 if __name__ == "__main__":

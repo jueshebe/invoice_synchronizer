@@ -14,5 +14,7 @@ from pirpos2siigo.models.invoices import (
     Employee,
     InvoiceProduct,
     Invoice,
+    InvoiceStatus,
     Payment,
+    InvoiceStatus
 )

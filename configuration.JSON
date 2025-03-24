@@ -5,11 +5,15 @@
             "siigo_id": 3025},
         {
             "pirpos_name": "Tarjeta débito",
-            "siigo_id":3027
+            "siigo_id": 3027
         },
         {
             "pirpos_name": "Tarjeta crédito",
             "siigo_id": 3027
+        },
+        {
+            "pirpos_name": "Transferencia bancaria",
+            "siigo_id": 8434
         },
         {
             "pirpos_name": "Transferencia bancaria",
@@ -41,18 +45,23 @@
     "prefix_map": [
         {
             "prefix": "LL",
-            "siigo_id": 13136, 
+            "siigo_id": 13136,
             "siigo_code": 1
         },
         {
             "prefix": "LL.",
-            "siigo_id": 13136, 
+            "siigo_id": 13136,
             "siigo_code": 1
         },
         {
             "prefix": "",
-            "siigo_id": 27233, 
+            "siigo_id": 27233,
             "siigo_code": 3
+        },
+        {
+            "prefix": "FVE",
+            "siigo_id": 28091,
+            "siigo_code": 4
         }
     ],
     "default_client": {

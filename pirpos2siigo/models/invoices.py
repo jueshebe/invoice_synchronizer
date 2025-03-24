@@ -1,5 +1,6 @@
 """Model for invoices."""
 from typing import Tuple, List, Optional
+from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel
 from pirpos2siigo.models.clients import Client
@@ -41,6 +42,13 @@ class Prefix(BaseModel):
     siigo_code: int
 
 
+class InvoiceStatus(str, Enum):
+    """Invoice status model."""
+
+    PAID = "Pagada"
+    CANCELED = "Anulada"
+
+
 class Invoice(BaseModel):
     """Invoice model."""
 
@@ -49,8 +57,10 @@ class Invoice(BaseModel):
     seller: Employee
     client: Client
     created_on: datetime
+    anulated_date: Optional[datetime] = None
     invoice_prefix: Prefix
     invoice_number: int
     payment_method: List[Tuple[Payment, float]]
     products: List[InvoiceProduct]
     total: float
+    status: InvoiceStatus = InvoiceStatus.PAID
