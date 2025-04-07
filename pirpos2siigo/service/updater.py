@@ -268,8 +268,8 @@ class Updater:
             ref_invoices, unchecked_invoices
         )
 
-        failed_invoices = []
         for _ in range(4):
+            failed_invoices = []
             for counter, invoice in enumerate(invoices_to_delete):
                 try:
                     # self.siigo_client.remove_invoice(invoice)
