@@ -86,9 +86,9 @@
     "retentions":[
         {
             "pirpos_name": "",
-            "siigo_name": "Autorrenta 1.1%",
-            "siigo_id": 19026,
-            "value": 0.011
+            "siigo_name": "Autorrenta 3.5%",
+            "siigo_id": 19855,
+            "value": 0.035
         }
     ]
 
