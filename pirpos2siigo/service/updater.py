@@ -213,49 +213,49 @@ class Updater:
         ref_invoices = self.pirpos_client.get_pirpos_invoices_per_client(
             init_date, end_day, status=InvoiceStatus.CANCELED
         )
-        unchecked_invoices = self.siigo_client.get_siigo_invoices(
-            init_date, end_day
-        )
-
-        (
-            missing_invoices,
-            outdated_invoices,
-            _,
-        ) = get_missing_outdated_invoices(ref_invoices, unchecked_invoices)
-
-        for _ in range(100):
-            failed_invoices = []
-            for counter, invoice in enumerate(missing_invoices):
-                try:
-                    if not invoice.payment_method:
-                        self.logger.info(
-                            f"Invoice without payment method {invoice.invoice_prefix}{invoice.invoice_number}"
-                        )
-                        continue
-                    self.siigo_client.create_invoice(invoice)
-                    self.logger.info(
-                        f"{invoice.invoice_number} | {counter + 1}/{len(missing_invoices)} invoices created"
-                    )
-                except Exception as error:
-                    failed_invoices.append(invoice)
-                    self.logger.warning(
-                        f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number}\nerror: {error}"
-                    )
-                    # self.logger.error(
-                    #     f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number} check invoices_error.json"
-                    # )
-                    # error_data = {
-                    #     "type_op": "Creating",
-                    #     "invoice": json.loads(invoice.json()),
-                    #     "error": str(error),
-                    #     "error_date": str(datetime.now()),
-                    # }
-                    # save_error(error_data, "invoices_error.json")
-            missing_invoices = copy(failed_invoices)
-            failed_invoices = []
-
-            if len(missing_invoices) == 0:
-                break
+        # unchecked_invoices = self.siigo_client.get_siigo_invoices(
+        #     init_date, end_day
+        # )
+        #
+        # (
+        #     missing_invoices,
+        #     outdated_invoices,
+        #     _,
+        # ) = get_missing_outdated_invoices(ref_invoices, unchecked_invoices)
+        #
+        # for _ in range(100):
+        #     failed_invoices = []
+        #     for counter, invoice in enumerate(missing_invoices):
+        #         try:
+        #             if not invoice.payment_method:
+        #                 self.logger.info(
+        #                     f"Invoice without payment method {invoice.invoice_prefix}{invoice.invoice_number}"
+        #                 )
+        #                 continue
+        #             self.siigo_client.create_invoice(invoice)
+        #             self.logger.info(
+        #                 f"{invoice.invoice_number} | {counter + 1}/{len(missing_invoices)} invoices created"
+        #             )
+        #         except Exception as error:
+        #             failed_invoices.append(invoice)
+        #             self.logger.warning(
+        #                 f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number}\nerror: {error}"
+        #             )
+        #             # self.logger.error(
+        #             #     f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number} check invoices_error.json"
+        #             # )
+        #             # error_data = {
+        #             #     "type_op": "Creating",
+        #             #     "invoice": json.loads(invoice.json()),
+        #             #     "error": str(error),
+        #             #     "error_date": str(datetime.now()),
+        #             # }
+        #             # save_error(error_data, "invoices_error.json")
+        #     missing_invoices = copy(failed_invoices)
+        #     failed_invoices = []
+        #
+        #     if len(missing_invoices) == 0:
+        #         break
 
         self.logger.info("Anulating invoices")
 

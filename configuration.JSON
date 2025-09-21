@@ -2,9 +2,14 @@
     "payment_map": [
         {
             "pirpos_name": "Efectivo",
-            "siigo_id": 3025},
+            "siigo_id": 3025
+        },
         {
             "pirpos_name": "Tarjeta débito",
+            "siigo_id": 3027
+        },
+        {
+            "pirpos_name": "Transferencia bancaria",
             "siigo_id": 3027
         },
         {
@@ -26,6 +31,10 @@
         {
             "pirpos_name": "Rappi",
             "siigo_id": 7325
+        },
+        {
+            "pirpos_name": "Link de pago",
+            "siigo_id": 12023
         }
     ],
     "taxes_map": [
