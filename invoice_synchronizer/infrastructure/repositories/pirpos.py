@@ -7,8 +7,8 @@ import logging
 import time
 from datetime import datetime, timedelta
 import requests
-from invoice_synchronizer.models import Client, Product, Invoice
-from invoice_synchronizer.clients.utils import (
+from invoice_synchronizer.domain import User, Product, Invoice, PlatformConnector
+from invoice_synchronizer.infrastructure.repositories.utils import (
     load_pirpos2siigo_config,
     create_client,
     create_pirpos_product,
@@ -20,7 +20,7 @@ from invoice_synchronizer.clients.utils import (
 )
 
 
-class PirposConnector:
+class PirposConnector(PlatformConnector):
     """Class to manage pirpos invoices, products and clients."""
 
     def __init__(
@@ -28,6 +28,7 @@ class PirposConnector:
         pirpos_username: str,
         pirpos_password: str,
         configuration_path: str,
+        batch_size: int = 200,
         logger: Logger = logging.getLogger(),
     ):
         """Parameters used to make a connection."""
@@ -37,9 +38,8 @@ class PirposConnector:
         self.__configuration = load_pirpos2siigo_config(configuration_path)
         self.__pirpos_access_token = self.__get_pirpos_access_token()
         self.__products: List[Product]
-        self.__clients: List[Client]
-        # self.get_pirpos_clients()
-        # self.get_pirpos_products()
+        self.__clients: List[User]
+        self.__batch_size = batch_size
 
         self.__logger.info("Pirpos connector initialized.")
 
@@ -80,7 +80,7 @@ class PirposConnector:
 
         return access_token
 
-    def get_pirpos_clients(self, batch_clients: int = 200) -> None:
+    def get_clients(self) -> List[User]:
         """Get pirpos clients.
 
         Parameters
@@ -89,7 +89,7 @@ class PirposConnector:
             batch used to download clients, by default 200
         """
         page = 0
-        clients: List[Client] = []
+        clients: List[User] = []
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
@@ -98,7 +98,7 @@ class PirposConnector:
         while True:
             url = (
                 "https://api.pirpos.com/clients?pagination=true"
-                f"&limit={batch_clients}&page={page}&clientData=&"
+                f"&limit={self.__batch_size}&page={page}&clientData=&"
             )
 
             response = requests.request("GET", url, headers=headers)
@@ -143,8 +143,9 @@ class PirposConnector:
             page += 1
 
         self.__clients = clients
+        return clients
 
-    def get_pirpos_products(self, batch_products: int = 200) -> None:
+    def get_products(self) -> List[Product]:
         """Get created products on pirpos.
 
         Parameters
@@ -163,7 +164,7 @@ class PirposConnector:
         while True:
             url = (
                 f"https://api.pirpos.com/products?pagination=true&limit="
-                f"{batch_products}&page={page}&name=&categoryId=undefined&useInRappi=undefined&"
+                f"{self.__batch_size}&page={page}&name=&categoryId=undefined&useInRappi=undefined&"
             )
             response = requests.request("GET", url, headers=headers)
             if not response.ok:
@@ -192,11 +193,12 @@ class PirposConnector:
 
             page += 1
         self.__products = products
+        return products
 
-    def get_pirpos_invoices_per_client(
+    def get_invoices(
         self, init_day: datetime, end_day: datetime, step_days: int = 10
     ) -> List[Invoice]:
-        """Get invoices per client on pirpos.
+        """Get invoices from pirpos.
 
         Parameters
         ----------
@@ -204,13 +206,11 @@ class PirposConnector:
             initial time to download invoices. year-month-day
         end_day : datetime
             end time to download invoices year-month-day
-        batch_invoices : int, optional
-            days used to download invoices in steps, by default 10
 
         Returns
         -------
         List[Invoice]
-            Pirpos invoices per client in a range of time
+            Pirpos invoices in a range of time
         """
         try:
             self.clients
@@ -343,7 +343,7 @@ class PirposConnector:
         return invoices_per_client
 
     @property
-    def clients(self) -> List[Client]:
+    def clients(self) -> List[User]:
         """Getter for clients."""
         return self.__clients
 
