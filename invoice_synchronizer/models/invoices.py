@@ -3,9 +3,9 @@ from typing import List, Dict
 from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel
-from pirpos2siigo.models.user import User
-from pirpos2siigo.models.products import Product
-from pirpos2siigo.models.taxes import Retention, TaxType
+from invoice_synchronizer.models.user import User
+from invoice_synchronizer.models.products import Product
+from invoice_synchronizer.models.taxes import Retention, TaxType
 from typing import Optional
 
 

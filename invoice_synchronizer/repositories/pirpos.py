@@ -7,8 +7,8 @@ import logging
 import time
 from datetime import datetime, timedelta
 import requests
-from pirpos2siigo.models import Client, Product, Invoice
-from pirpos2siigo.clients.utils import (
+from invoice_synchronizer.models import Client, Product, Invoice
+from invoice_synchronizer.clients.utils import (
     load_pirpos2siigo_config,
     create_client,
     create_pirpos_product,

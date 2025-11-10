@@ -5,8 +5,8 @@ import sys
 import os
 import logging
 from datetime import datetime
-from pirpos2siigo.clients import PirposConnector, SiigoConnector
-from pirpos2siigo.service import Updater
+from invoice_synchronizer.clients import PirposConnector, SiigoConnector
+from invoice_synchronizer.service import Updater
 
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.DEBUG)

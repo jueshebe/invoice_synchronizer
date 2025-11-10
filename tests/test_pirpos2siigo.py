@@ -1,4 +1,4 @@
-from pirpos2siigo import __version__
+from invoice_synchronizer import __version__
 
 
 def test_version():

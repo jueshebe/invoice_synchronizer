@@ -1,8 +1,8 @@
 """Model for products."""
 from typing import List, Dict
 from pydantic import BaseModel, validator
-from pirpos2siigo.models.utils import normalize
-from pirpos2siigo.models.taxes import TaxType
+from invoice_synchronizer.models.utils import normalize
+from invoice_synchronizer.models.taxes import TaxType
 
 
 class Product(BaseModel):

@@ -1,7 +1,7 @@
 """Clients modules."""
-from pirpos2siigo.clients.pirpos import PirposConnector
-from pirpos2siigo.clients.siigo import SiigoConnector
-from pirpos2siigo.clients.utils import (
+from invoice_synchronizer.clients.pirpos import PirposConnector
+from invoice_synchronizer.clients.siigo import SiigoConnector
+from invoice_synchronizer.clients.utils import (
     load_pirpos2siigo_config,
     ErrorConfigPirposSiigo,
     create_client,

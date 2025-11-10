@@ -1,8 +1,10 @@
 [tool.poetry]
-name = "pirpos2siigo"
+name = "invoice_synchronizer"
 version = "1.0.0"
 description = ""
 authors = ["JulianEstebanHerrera <julianesteban.herrera@mercadolibre.com.co>"]
+readme = "README.md"
+packages = [{include = "invoice_synchronizer"}]
 
 [tool.poetry.dependencies]
 python = "^3.8"

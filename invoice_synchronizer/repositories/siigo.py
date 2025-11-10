@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import logging
 from logging import Logger
 import requests
-from pirpos2siigo.models import (
+from invoice_synchronizer.models import (
     Client,
     DocumentType,
     Product,
@@ -16,7 +16,7 @@ from pirpos2siigo.models import (
     TaxInfo,
     Pirpos2SiigoMap,
 )
-from pirpos2siigo.clients.utils import (
+from invoice_synchronizer.clients.utils import (
     load_pirpos2siigo_config,
     create_client,
     create_invoice,

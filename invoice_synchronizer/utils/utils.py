@@ -5,7 +5,7 @@ import calendar
 from os import listdir
 from os.path import isfile, join
 from typing import Callable, List, Tuple, Dict, Union, Optional
-from pirpos2siigo.utils.errors import (
+from invoice_synchronizer.utils.errors import (
     ErrorLoadingPirposProducts,
     ErrorLoadingPirposInvoices,
     ErrorLoadingSiigoInvoices,

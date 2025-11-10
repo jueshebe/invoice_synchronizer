@@ -2,7 +2,7 @@
 from typing import Optional, Dict, Any, List, Tuple, Union
 from datetime import datetime
 import json
-from pirpos2siigo.models import (
+from invoice_synchronizer.models import (
     Pirpos2SiigoMap,
     Client,
     CityDetail,

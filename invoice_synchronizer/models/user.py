@@ -2,7 +2,7 @@
 from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel, validator
-from pirpos2siigo.models.utils import normalize
+from invoice_synchronizer.models.utils import normalize
 
 
 class CityDetail(BaseModel):

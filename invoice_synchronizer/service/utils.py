@@ -2,7 +2,7 @@
 from typing import List, Tuple, Dict, Any
 from os import path
 import json
-from pirpos2siigo.models import Client, Product, Invoice
+from invoice_synchronizer.models import Client, Product, Invoice
 
 
 def get_missing_outdated_clients(
