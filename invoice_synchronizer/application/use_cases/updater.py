@@ -4,7 +4,7 @@ from datetime import datetime
 import json
 import logging
 from invoice_synchronizer.clients import PirposConnector, SiigoConnector
-from invoice_synchronizer.service.utils import (
+from invoice_synchronizer.application.use_cases.utils import (
     get_missing_outdated_clients,
     save_error,
     get_missing_outdated_products,

@@ -9,7 +9,7 @@ import calendar
 import time
 import re
 import os
-from invoice_synchronizer.utils.utils import (
+from invoice_synchronizer.shared.utils import (
     Utils,
     clean_document,
     read_pirpos_product,
@@ -20,7 +20,7 @@ from invoice_synchronizer.utils.utils import (
     get_missing_products,
     get_missing_invoices,
 )
-from invoice_synchronizer.utils.errors import (
+from invoice_synchronizer.shared.errors import (
     ErrorSiigoToken,
     ErrorPirposToken,
     ErrorLoadingPirposClients,
