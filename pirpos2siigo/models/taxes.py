@@ -1,15 +1,16 @@
 """Model for products."""
-from enum import Enum
+from pydantic import BaseModel
 
 
-class TaxType(Enum):
+class TaxType(BaseModel):
     """Stock information."""
+    
+    tax_name: str
+    tax_percentage: float
 
-    IVA19 = 0.19
-    IMPO_CONSUMO = 0.08
 
-
-class Retention(Enum):
+class Retention(BaseModel):
     """Retention Information."""
 
-    AUTORRENTA_08 = "AUTORRENTA_08"
+    retention_name: str
+    retention_percentage: float

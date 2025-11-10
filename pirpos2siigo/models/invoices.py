@@ -1,23 +1,12 @@
 """Model for invoices."""
-from typing import List
+from typing import List, Dict
 from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel
-from pirpos2siigo.models.person import Person
+from pirpos2siigo.models.user import User
 from pirpos2siigo.models.products import Product
-from pirpos2siigo.models.taxes import Retention
-
-
-class InvoiceProduct(BaseModel):
-    """Invoice product model.
-
-    Product object contains current information of a product
-    some invoice can have another state of a product.
-    """
-
-    product: Product
-    price: float
-    quantity: int
+from pirpos2siigo.models.taxes import Retention, TaxType
+from typing import Optional
 
 
 class PaymentType(Enum):
@@ -43,16 +32,28 @@ class InvoiceId(BaseModel):
     prefix: str
     number: int
 
+class InvoiceStatus(Enum):
+    """Invoice status."""
+
+    PAID = "PAID"
+    PENDING = "PENDING"
+    ANULATED = "ANULATED"
+
 
 class Invoice(BaseModel):
     """Invoice model."""
 
-    invoice_id: InvoiceId
-    cachier: Person
-    seller: Person
-    client: Person
+    business: User
+    cachier: User
+    sell_point: str
+    seller: User
+    client: User
     created_on: datetime
-    products: List[InvoiceProduct]
-    retention: List[Retention]
+    anulated_on: Optional[datetime] = None
+    invoice_id: InvoiceId
+    payments: List[Payment]
+    products: List[Product]
     total: float
-    payments: Payment
+    taxes_values: List[Dict[TaxType, float]]
+    retention_values: List[Dict[Retention, float]]
+    status: InvoiceStatus = InvoiceStatus.PAID

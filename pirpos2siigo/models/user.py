@@ -42,27 +42,24 @@ class DocumentType(Enum):
     NUIP = 91
 
 
-class VinculationType(Enum):
-    """Person type."""
-
-    ClIENT_d = "CLIENT"
-    EMPLOYEE = "EMPLOYEE"
-    SUPPLIER = "SUPPLIER"
-
-
-class Person(BaseModel):
-    """Client info."""
+class User(BaseModel):
+    """User info.
+    
+    This model is used to represent any user in the system, such as
+    clients, employees, companies, system owner, or other types of users.
+    any person/compny is considered a user.
+    """
 
     name: str
+    last_name: Optional[str] = None
+    document_type: DocumentType
+    document_number: int
+    check_digit: Optional[int]
+    city_detail: CityDetail
+    responsibilities: Responsibilities
     email: str
     phone: str
     address: str
-    document: int
-    check_digit: Optional[int]
-    document_type: DocumentType
-    vinculation_type: List[VinculationType]
-    responsibilities: Responsibilities
-    city_detail: CityDetail
 
     @validator("name")
     @classmethod
