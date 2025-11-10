@@ -13,7 +13,6 @@ from pirpos2siigo.models import (
     Payment,
     Employee,
     InvoiceProduct,
-    InvoiceStatus,
 )
 
 
@@ -63,7 +62,6 @@ def clean_document(document: Union[str, int]) -> int:
         document_str = document_str[: document_str.find("-")]
     return int(document_str)
 
-
 def create_client(
     configuration_file: Pirpos2SiigoMap,
     name: str,
@@ -91,9 +89,7 @@ def create_client(
         email=email if email else default_client.email,
         phone=phone if phone else default_client.phone,
         address=address if address else default_client.address,
-        document=clean_document(document)
-        if document
-        else default_client.document,
+        document=clean_document(document) if document else default_client.document,
         check_digit=check_digit if check_digit else default_client.check_digit,
         document_type=document_type
         if document_type
@@ -121,13 +117,8 @@ def create_client(
     )
 
 
-def get_tax_map(
-    configuration: Pirpos2SiigoMap, name_key: Optional[str]
-) -> Optional[TaxInfo]:
+def get_tax_map(configuration: Pirpos2SiigoMap, name_key: str) -> TaxInfo:
     """Find tax mapping."""
-    if not name_key:
-        return None
-
     for tax_map in configuration.taxes_map:
         if name_key in [tax_map.siigo_name, tax_map.pirpos_name]:
             return TaxInfo(
@@ -152,12 +143,25 @@ def create_pirpos_product(
     products: List[Product] = []
 
     if len(sub_products) == 0:
-        try:
+
+        products.append(
+            Product(
+                product_id=product_id,
+                name=name,
+                price=location_stock["price"],
+                taxes=[
+                    get_tax_map(configuration, location_stock["tax"]["name"])
+                ],
+            )
+        )
+    else:
+        for sub_product in sub_products:
+            product_id = sub_product["_id"]
             products.append(
                 Product(
                     product_id=product_id,
-                    name=name,
-                    price=location_stock["price"],
+                    name=sub_product["name"],
+                    price=sub_product["locationsStock"][0]["price"],
                     taxes=[
                         get_tax_map(
                             configuration, location_stock["tax"]["name"]
@@ -165,59 +169,6 @@ def create_pirpos_product(
                     ],
                 )
             )
-        except:
-            try:
-                taxes = [
-                    get_tax_map(
-                        configuration, location_stock["taxes"][0]["tax"]["name"]
-                    )
-                ]
-            except:
-                taxes = []
-
-            products.append(
-                Product(
-                    product_id=product_id,
-                    name=name,
-                    price=location_stock["price"],
-                    taxes=taxes,
-                )
-            )
-
-    else:
-        for sub_product in sub_products:
-            product_id = sub_product["_id"]
-            try:
-                products.append(
-                    Product(
-                        product_id=product_id,
-                        name=sub_product["name"],
-                        price=sub_product["locationsStock"][0]["price"],
-                        taxes=[
-                            get_tax_map(
-                                configuration, location_stock["tax"]["name"]
-                            )
-                        ],
-                    )
-                )
-            except:
-                tax_name = sub_product["locationsStock"][0]["taxes"][0]["tax"][
-                    "name"
-                ]
-                products.append(
-                    Product(
-                        product_id=product_id,
-                        name=sub_product["name"],
-                        price=sub_product["locationsStock"][0]["price"],
-                        taxes=[
-                            get_tax_map(
-                                configuration,
-                                tax_name,
-                            )
-                        ],
-                    )
-                )
-
     return products
 
 
@@ -254,14 +205,12 @@ def create_invoice(
     seller_id: str,
     client: Client,
     created_on: datetime,
-    deleted_time: Optional[datetime],
     invoice_prefix: str,
     invoice_number: int,
     payments: List[Tuple[Union[str, int], float]],
-    invoice_products: List[Tuple[Product, float, int, Optional[str]]],
+    invoice_products: List[Tuple[Product, float, int, str]],
     total: float,
-    siigo_id: Optional[str] = None,
-    invoice_status: InvoiceStatus = InvoiceStatus.PAID,
+    siigo_id: Optional[str] = None
 ) -> Invoice:
     """Create invoice."""
     return Invoice(
@@ -269,8 +218,7 @@ def create_invoice(
         cachier=Employee(name=cachier_name, employee_id=cachier_id),
         seller=Employee(name=seller_name, employee_id=seller_id),
         client=client,
-        created_on=created_on,
-        anulated_date=deleted_time,
+        created_on=datetime(created_on.year, created_on.month, created_on.day),
         invoice_prefix=get_prefix_map(configuration, invoice_prefix),
         invoice_number=invoice_number,
         payment_method=[
@@ -291,7 +239,6 @@ def create_invoice(
             for invoice_product in invoice_products
         ],
         total=total,
-        status=invoice_status,
     )
 
 
@@ -342,56 +289,11 @@ class ErrorUpdatingSiigoClient(Exception):
 class ErrorCreatingSiigoProduct(Exception):
     """Can't create product."""
 
-
 class ErrorUpdatingSiigoProduct(Exception):
     """Can't update product."""
-
 
 class ErrorCreatingSiigoInvoice(Exception):
     """Can't create invoice."""
 
-
 class ErrorUpdatingSiigoInvoice(Exception):
     """Can't update invoice."""
-
-
-def get_payload_credit_note(invoice: Invoice) -> Dict[str, Any]:
-    items = []
-    invoice_price = 0
-    for product in invoice.products:
-        price = round(
-            product.price / (1 + (product.tax.value if product.tax else 0)), 6
-        )
-        invoice_price += product.price * product.quantity
-        item = {
-            "code": product.product.product_id,
-            "quantity": product.quantity,
-            "description": product.product.name,
-            "price": price,
-            "taxes": [{"id": product.tax.siigo_id}] if product.tax else [],
-        }
-        items.append(item)
-
-    payments = []
-    registed_payments = 0
-    for payment in invoice.payment_method:
-        product_payment = {
-            "id": payment[0].siigo_id,
-            "value": payment[1],
-            "due_date": invoice.created_on.strftime("%Y-%m-%d"),
-        }
-        registed_payments += payment[1]
-        payments.append(product_payment)
-
-    difference = invoice_price - registed_payments
-    payments[-1]["value"] += difference
-
-    payload = {
-        "document": {"id": 13143},
-        "date": invoice.anulated_date.strftime("%Y-%m-%d"),
-        "invoice": invoice.siigo_id,
-        "reason": "2",
-        "items": items,
-        "payments": payments
-    }
-    return payload

@@ -1,25 +1,18 @@
 """Model for products."""
-from typing import List, Optional
+from typing import List, Dict
 from pydantic import BaseModel, validator
 from pirpos2siigo.models.utils import normalize
-
-class TaxInfo(BaseModel):
-    """Stock information."""
-
-    pirpos_name: str
-    siigo_name: str
-    siigo_id: int
-    value: float
+from pirpos2siigo.models.taxes import TaxType
 
 
 class Product(BaseModel):
     """Product info."""
 
-    siigo_id: Optional[str]
-    product_id: str
     name: str
-    price: float
-    taxes: List[TaxInfo]
+    base: float
+    final_price: float
+    taxes: List[TaxType]
+    taxes_values: List[Dict[TaxType, float]]
 
     @validator("name")
     @classmethod

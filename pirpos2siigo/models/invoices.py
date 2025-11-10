@@ -1,66 +1,59 @@
 """Model for invoices."""
-from typing import Tuple, List, Optional
+from typing import List, Dict
 from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel
-from pirpos2siigo.models.clients import Client
-from pirpos2siigo.models.products import Product, TaxInfo
+from pirpos2siigo.models.user import User
+from pirpos2siigo.models.products import Product
+from pirpos2siigo.models.taxes import Retention, TaxType
+from typing import Optional
 
 
-class Employee(BaseModel):
-    """Cachier model."""
+class PaymentType(Enum):
+    """Type of payments."""
 
-    name: str
-    employee_id: str  # TODO: add employee mapping
-
-
-class InvoiceProduct(BaseModel):
-    """Invoice product model.
-
-    Product object contains current information of a product
-    some invoice can have another state of a product.
-    """
-
-    product: Product
-    price: float
-    quantity: int
-    tax: Optional[TaxInfo]
+    CASH = "CASH"
+    DEBIT_CARD = "DEBIT_CARD"
+    CREDIT_CARD = "CREDIT_CARD"
+    BANK_TRANSFER = "BANK_TRANSFER"
+    RAPPI = "RAPPI"
 
 
 class Payment(BaseModel):
     """Payment model."""
 
-    pirpos_name: str
-    siigo_id: int
+    payment_type: PaymentType
+    value: float
 
 
-class Prefix(BaseModel):
-    """Prefix model."""
+class InvoiceId(BaseModel):
+    """Invoice identifier."""
 
     prefix: str
-    siigo_id: int
-    siigo_code: int
+    number: int
 
+class InvoiceStatus(Enum):
+    """Invoice status."""
 
-class InvoiceStatus(str, Enum):
-    """Invoice status model."""
-
-    PAID = "Pagada"
-    CANCELED = "Anulada"
+    PAID = "PAID"
+    PENDING = "PENDING"
+    ANULATED = "ANULATED"
 
 
 class Invoice(BaseModel):
     """Invoice model."""
 
-    siigo_id: Optional[str]
-    cachier: Employee
-    seller: Employee
-    client: Client
+    business: User
+    cachier: User
+    sell_point: str
+    seller: User
+    client: User
     created_on: datetime
-    anulated_date: Optional[datetime] = None
-    invoice_prefix: Prefix
-    invoice_number: int
-    payment_method: List[Tuple[Payment, float]]
-    products: List[InvoiceProduct]
+    anulated_on: Optional[datetime] = None
+    invoice_id: InvoiceId
+    payments: List[Payment]
+    products: List[Product]
     total: float
+    taxes_values: List[Dict[TaxType, float]]
+    retention_values: List[Dict[Retention, float]]
     status: InvoiceStatus = InvoiceStatus.PAID

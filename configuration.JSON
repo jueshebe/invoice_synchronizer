@@ -2,23 +2,14 @@
     "payment_map": [
         {
             "pirpos_name": "Efectivo",
-            "siigo_id": 3025
-        },
+            "siigo_id": 3025},
         {
             "pirpos_name": "Tarjeta débito",
-            "siigo_id": 3027
-        },
-        {
-            "pirpos_name": "Transferencia bancaria",
-            "siigo_id": 3027
+            "siigo_id":3027
         },
         {
             "pirpos_name": "Tarjeta crédito",
             "siigo_id": 3027
-        },
-        {
-            "pirpos_name": "Transferencia bancaria",
-            "siigo_id": 8434
         },
         {
             "pirpos_name": "Transferencia bancaria",
@@ -31,10 +22,6 @@
         {
             "pirpos_name": "Rappi",
             "siigo_id": 7325
-        },
-        {
-            "pirpos_name": "Link de pago",
-            "siigo_id": 12023
         }
     ],
     "taxes_map": [
@@ -54,23 +41,18 @@
     "prefix_map": [
         {
             "prefix": "LL",
-            "siigo_id": 13136,
+            "siigo_id": 13136, 
             "siigo_code": 1
         },
         {
             "prefix": "LL.",
-            "siigo_id": 13136,
+            "siigo_id": 13136, 
             "siigo_code": 1
         },
         {
             "prefix": "",
-            "siigo_id": 27233,
+            "siigo_id": 27233, 
             "siigo_code": 3
-        },
-        {
-            "prefix": "FVE",
-            "siigo_id": 28091,
-            "siigo_code": 4
         }
     ],
     "default_client": {
@@ -95,9 +77,9 @@
     "retentions":[
         {
             "pirpos_name": "",
-            "siigo_name": "Autorrenta 3.5%",
-            "siigo_id": 19855,
-            "value": 0.035
+            "siigo_name": "Autorrenta 0.8%",
+            "siigo_id": 18091,
+            "value": 0.008
         }
     ]
 
