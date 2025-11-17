@@ -1,12 +1,12 @@
 """Model for invoices."""
-from typing import List, Dict
+
+from typing import List, Dict, Optional
 from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel
-from invoice_synchronizer.models.user import User
-from invoice_synchronizer.models.products import Product
-from invoice_synchronizer.models.taxes import Retention, TaxType
-from typing import Optional
+from invoice_synchronizer.domain.models.user import User
+from invoice_synchronizer.domain.models.products import Product
+from invoice_synchronizer.domain.models.taxes import Retention, TaxType
 
 
 class PaymentType(Enum):
@@ -31,6 +31,7 @@ class InvoiceId(BaseModel):
 
     prefix: str
     number: int
+
 
 class InvoiceStatus(Enum):
     """Invoice status."""

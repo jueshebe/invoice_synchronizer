@@ -1,12 +1,8 @@
 """PirPos client."""
-from typing import List, Tuple
-import os
+
+from typing import List
 from abc import ABC, abstractmethod
-import json
-from logging import Logger
-import logging
 from datetime import datetime
-import time
 from invoice_synchronizer.domain.models import User, Product, Invoice
 
 
@@ -22,9 +18,7 @@ class PlatformConnector(ABC):
         """Get current products."""
 
     @abstractmethod
-    def get_invoices(
-        self, init_day: datetime, end_day: datetime
-    ) -> List[Invoice]:
+    def get_invoices(self, init_day: datetime, end_day: datetime) -> List[Invoice]:
         """Get invoices.
 
         Parameters
@@ -39,13 +33,3 @@ class PlatformConnector(ABC):
         List[Invoice]
             Invoices per client in a range of time
         """
-
-    @property
-    @abstractmethod
-    def clients(self) -> List[User]:
-        """Getter for clients."""
-
-    @property
-    @abstractmethod
-    def products(self) -> List[Product]:
-        """Getter for products."""

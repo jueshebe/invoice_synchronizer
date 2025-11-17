@@ -1,0 +1,25 @@
+[MASTER]
+# Use the Python executable from the virtual environment
+init-hook="import sys; sys.path.insert(0, '/Users/julianherrera/apps/asadero/pirpos-clean-arch')"
+
+# Add files or folders to the blacklist. They should be base names, not paths.
+ignore=CVS,.git,__pycache__,.pytest_cache
+
+[MESSAGES CONTROL]
+# Disable specific messages that might be problematic with pydantic
+# E0611: No name in module (specifically for pydantic.BaseModel)
+# C0114: Missing module docstring
+# C0115: Missing class docstring  
+# C0116: Missing function docstring
+# R0903: Too few public methods
+disable=C0114,C0115,C0116,R0903,E0611:no-name-in-module
+
+[TYPECHECK]
+# List of module names for which member attributes should not be checked
+ignored-modules=pydantic
+
+# List of class names for which member attributes should not be checked
+ignored-classes=BaseModel
+
+# List of members which are set dynamically and missed by pylint inference
+generated-members=pydantic.*

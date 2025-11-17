@@ -1,4 +1,5 @@
 """Model for products."""
+
 from typing import List, Dict
 from pydantic import BaseModel, validator
 from invoice_synchronizer.domain.models.utils import normalize

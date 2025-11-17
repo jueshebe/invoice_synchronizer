@@ -1,8 +1,9 @@
 """Model for clients."""
+
 from enum import Enum
-from typing import Optional, List
+from typing import Optional
 from pydantic import BaseModel, validator
-from invoice_synchronizer.models.utils import normalize
+from invoice_synchronizer.domain.models.utils import normalize
 
 
 class CityDetail(BaseModel):
@@ -44,7 +45,7 @@ class DocumentType(Enum):
 
 class User(BaseModel):
     """User info.
-    
+
     This model is used to represent any user in the system, such as
     clients, employees, companies, system owner, or other types of users.
     any person/compny is considered a user.

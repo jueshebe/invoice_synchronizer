@@ -1,4 +1,5 @@
 """PirPos client."""
+
 from typing import List, Tuple
 import os
 import json
@@ -6,7 +7,7 @@ from logging import Logger
 import logging
 import time
 from datetime import datetime, timedelta
-import requests
+import requests  # type: ignore
 from invoice_synchronizer.domain import User, Product, Invoice, PlatformConnector
 from invoice_synchronizer.infrastructure.repositories.utils import (
     load_pirpos2siigo_config,
@@ -37,9 +38,9 @@ class PirposConnector(PlatformConnector):
         self.__pirpos_password = pirpos_password
         self.__configuration = load_pirpos2siigo_config(configuration_path)
         self.__pirpos_access_token = self.__get_pirpos_access_token()
-        self.__products: List[Product]
-        self.__clients: List[User]
         self.__batch_size = batch_size
+        self.__requests_timeout = 10
+        self.__days_step = 10
 
         self.__logger.info("Pirpos connector initialized.")
 
@@ -62,21 +63,19 @@ class PirposConnector(PlatformConnector):
             "password": self.__pirpos_password,
         }
         headers = {"Content-Type": "application/json"}
-        response = requests.post(url, data=json.dumps(values), headers=headers)
+        response = requests.post(
+            url, data=json.dumps(values), headers=headers, timeout=self.__requests_timeout
+        )
 
         if not response.ok:
-            raise ErrorPirposToken(
-                "Error getting Pirpos token, check email and password"
-            )
+            raise ErrorPirposToken("Error getting Pirpos token, check email and password")
 
         data = response.json()
         if "tokenCurrent" in data.keys():
             access_token = data["tokenCurrent"]
             assert isinstance(access_token, str)
         else:
-            raise ErrorPirposToken(
-                "tokenCurrent key is not present in the respose"
-            )
+            raise ErrorPirposToken("tokenCurrent key is not present in the respose")
 
         return access_token
 
@@ -101,15 +100,13 @@ class PirposConnector(PlatformConnector):
                 f"&limit={self.__batch_size}&page={page}&clientData=&"
             )
 
-            response = requests.request("GET", url, headers=headers)
+            response = requests.request(
+                "GET", url, headers=headers, timeout=self.__requests_timeout
+            )
             if not response.ok:
-                raise ErrorLoadingPirposClients(
-                    f"Can't download PirPos clients\n {response.text}"
-                )
+                raise ErrorLoadingPirposClients(f"Can't download PirPos clients\n {response.text}")
 
-            data = response.json()[
-                "data"
-            ]  # TODO: check incoming data with BaseModel class
+            data = response.json()["data"]  # TODO: check incoming data with BaseModel class
             if len(data) == 0:
                 break
 
@@ -128,21 +125,13 @@ class PirposConnector(PlatformConnector):
                     document_type=client_data.get("idDocumentType"),
                     responsibilities=client_data.get("responsibilities"),
                     city_name=client_data.get("cityDetail", {}).get("cityName"),
-                    city_state=client_data.get("cityDetail", {}).get(
-                        "stateName"
-                    ),
+                    city_state=client_data.get("cityDetail", {}).get("stateName"),
                     city_code=client_data.get("cityDetail", {}).get("cityCode"),
-                    country_code=client_data.get("cityDetail", {}).get(
-                        "countryCode"
-                    ),
-                    state_code=client_data.get("cityDetail", {}).get(
-                        "stateCode"
-                    ),
+                    country_code=client_data.get("cityDetail", {}).get("countryCode"),
+                    state_code=client_data.get("cityDetail", {}).get("stateCode"),
                 )
                 clients.append(client)
             page += 1
-
-        self.__clients = clients
         return clients
 
     def get_products(self) -> List[Product]:
@@ -166,14 +155,12 @@ class PirposConnector(PlatformConnector):
                 f"https://api.pirpos.com/products?pagination=true&limit="
                 f"{self.__batch_size}&page={page}&name=&categoryId=undefined&useInRappi=undefined&"
             )
-            response = requests.request("GET", url, headers=headers)
+            response = requests.request(
+                "GET", url, headers=headers, timeout=self.__requests_timeout
+            )
             if not response.ok:
-                raise ErrorLoadingPirposProducts(
-                    "Can't download Pirpos Products"
-                )
-            data = response.json()[
-                "data"
-            ]  # TODO: check incoming data with BaseModel class
+                raise ErrorLoadingPirposProducts("Can't download Pirpos Products")
+            data = response.json()["data"]  # TODO: check incoming data with BaseModel class
             if len(data) == 0:
                 break
             for product_info in data:
@@ -192,11 +179,10 @@ class PirposConnector(PlatformConnector):
                 )
 
             page += 1
-        self.__products = products
         return products
 
     def get_invoices(
-        self, init_day: datetime, end_day: datetime, step_days: int = 10
+        self, init_day: datetime, end_day: datetime
     ) -> List[Invoice]:
         """Get invoices from pirpos.
 
@@ -212,21 +198,10 @@ class PirposConnector(PlatformConnector):
         List[Invoice]
             Pirpos invoices in a range of time
         """
-        try:
-            self.clients
-        except:
-            self.get_pirpos_clients()
-
-        try:
-            self.products
-        except:
-            self.get_pirpos_products()
 
         end_day += timedelta(days=1)
         if init_day > end_day:
-            raise ErrorLoadingPirposInvoices(
-                "end_day must be greater than init_day"
-            )
+            raise ErrorLoadingPirposInvoices("end_day must be greater than init_day")
         days = 0
         invoices_per_client: List[Invoice] = []
         headers = {
@@ -238,40 +213,36 @@ class PirposConnector(PlatformConnector):
         while True:
             time1 = init_day + timedelta(days=days)
             time2 = (
-                init_day + timedelta(days=days + step_days)
-                if init_day + timedelta(days=days + step_days) <= end_day
+                init_day + timedelta(days=days + self.__days_step)
+                if init_day + timedelta(days=days + self.__days_step) <= end_day
                 else end_day
             )
-            days += step_days
+            days += self.__days_step
             date1_str = datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
             date2_str = datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
             url = (
                 f"https://api.pirpos.com/reports/reportSalesInvoices?"
                 f"status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
             )
-            response = requests.request("GET", url, headers=headers)
+            response = requests.request(
+                "GET", url, headers=headers, timeout=self.__requests_timeout
+            )
             if not response.ok:
-                raise ErrorLoadingPirposInvoices(
-                    "Can't download invoices per client from pirpos"
-                )
-            data = (
-                response.json()
-            )  # TODO: validate incoming data with BaseModel
+                raise ErrorLoadingPirposInvoices("Can't download invoices per client from pirpos")
+            data = response.json()  # TODO: validate incoming data with BaseModel
 
             for invoice_info in data:
                 try:
                     # select client
                     client_document_str = str(invoice_info["client"].get("document", "0"))
-                    client_document = int(client_document_str) if client_document_str.isnumeric() else 0
+                    client_document = (
+                        int(client_document_str) if client_document_str.isnumeric() else 0
+                    )
 
-                    def filter_client(
-                        client: Client, document: int = client_document
-                    ) -> bool:
+                    def filter_client(client: Client, document: int = client_document) -> bool:
                         return client.document == document
 
-                    filtered_clients: List[Client] = list(
-                        filter(filter_client, self.__clients)
-                    )
+                    filtered_clients: List[Client] = list(filter(filter_client, self.__clients))
 
                     if len(filtered_clients) > 0:
                         client = filtered_clients[0]
@@ -283,9 +254,7 @@ class PirposConnector(PlatformConnector):
                     for product_info in invoice_info["products"]:
                         product_id = product_info["idInternal"]
 
-                        def filter_product(
-                            product: Product, product_id: str = product_id
-                        ) -> bool:
+                        def filter_product(product: Product, product_id: str = product_id) -> bool:
                             return product.product_id == product_id
 
                         filtered_products: List[Product] = list(
@@ -298,9 +267,7 @@ class PirposConnector(PlatformConnector):
                         price = product_info["price"]
                         quantity = product_info["quantity"]
                         tax_name = invoice_info["taxes"][0]["name"]
-                        invoice_products.append(
-                            (product, price, quantity, tax_name)
-                        )
+                        invoice_products.append((product, price, quantity, tax_name))
 
                     invoice_obj = create_invoice(
                         configuration=self.__configuration,
@@ -316,9 +283,7 @@ class PirposConnector(PlatformConnector):
                         invoice_number=invoice_info["seq"],
                         payments=[
                             (payment["paymentMethod"], payment["value"])
-                            for payment in invoice_info["paid"][
-                                "paymentMethodValue"
-                            ]
+                            for payment in invoice_info["paid"]["paymentMethodValue"]
                         ],
                         invoice_products=invoice_products,
                         total=invoice_info["total"],
@@ -342,29 +307,15 @@ class PirposConnector(PlatformConnector):
 
         return invoices_per_client
 
-    @property
-    def clients(self) -> List[User]:
-        """Getter for clients."""
-        return self.__clients
-
-    @property
-    def products(self) -> List[Product]:
-        """Getter for clients."""
-        return self.__products
-
 
 if __name__ == "__main__":
     user_name = os.getenv("PIRPOS_USER_NAME")
     user_password = os.getenv("PIRPOS_PASSWORD")
-    PATH = (
-        "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
-    )
+    PATH = "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
     assert isinstance(user_name, str)
     assert isinstance(user_password, str)
     time_1 = time.time()
-    connector = PirposConnector(
-        user_name, user_password, PATH, logging.getLogger()
-    )
+    connector = PirposConnector(user_name, user_password, PATH, logging.getLogger())
     connector.get_pirpos_products()
     print(time.time() - time_1)
     date_1 = datetime(2022, 11, 2)
