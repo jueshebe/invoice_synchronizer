@@ -89,3 +89,14 @@ class User(BaseModel):
         str
         """
         return phone.replace(" ", "")
+
+    def __eq__(self, other: object) -> bool:
+        """Compare two users based on their document number."""
+        if not isinstance(other, User):
+            return NotImplemented
+        self_dict = self.dict()
+        other_dict = other.dict()
+        for key in self_dict.keys():
+            if self_dict[key] != other_dict[key]:
+                return False
+        return True

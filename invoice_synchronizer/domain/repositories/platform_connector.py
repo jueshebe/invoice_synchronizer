@@ -3,7 +3,7 @@
 from typing import List
 from abc import ABC, abstractmethod
 from datetime import datetime
-from invoice_synchronizer.domain.models import User, Product, Invoice
+from invoice_synchronizer.domain.models import User, Product, Invoice, InvoiceStatus
 
 
 class PlatformConnector(ABC):
@@ -35,7 +35,7 @@ class PlatformConnector(ABC):
 
     @abstractmethod
     def get_invoices(
-        self, init_day: datetime, end_day: datetime, invoice_status: InvoiceStatus
+        self, init_day: datetime, end_day: datetime, invoice_status: List[InvoiceStatus]
     ) -> List[Invoice]:
         """Get invoices.
 
@@ -59,3 +59,7 @@ class PlatformConnector(ABC):
     @abstractmethod
     def update_invoice(self, invoice: Invoice) -> None:
         """Update invoice."""
+
+    @abstractmethod
+    def credit_note(self, invoice: Invoice) -> None:
+        """Create credit/anulate note for an invoice."""

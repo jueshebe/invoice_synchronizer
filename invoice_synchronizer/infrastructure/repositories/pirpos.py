@@ -12,7 +12,7 @@ from invoice_synchronizer.domain import User, Product, Invoice, PlatformConnecto
 from invoice_synchronizer.infrastructure.repositories.utils import (
     load_pirpos2siigo_config,
     create_client,
-    create_pirpos_product,
+    create_product,
     create_invoice,
     ErrorPirposToken,
     ErrorLoadingPirposClients,
@@ -134,6 +134,26 @@ class PirposConnector(PlatformConnector):
             page += 1
         return clients
 
+    def create_client(self, client: User) -> None:
+        """Create a client on pirpos.
+
+        Parameters
+        ----------
+        client : User
+            client to create
+        """
+        raise NotImplementedError("Method not implemented yet.")
+
+    def update_client(self, client: User) -> None:
+        """Update a client on pirpos.
+
+        Parameters
+        ----------
+        client : User
+            client to update
+        """
+        raise NotImplementedError("Method not implemented yet.")
+
     def get_products(self) -> List[Product]:
         """Get created products on pirpos.
 
@@ -169,7 +189,7 @@ class PirposConnector(PlatformConnector):
                 location_stock = product_info["locationsStock"][0]
                 sub_products = product_info["subProducts"]
                 products.extend(
-                    create_pirpos_product(
+                    create_product(
                         self.__configuration,
                         product_id,
                         name,
@@ -181,9 +201,17 @@ class PirposConnector(PlatformConnector):
             page += 1
         return products
 
-    def get_invoices(
-        self, init_day: datetime, end_day: datetime
-    ) -> List[Invoice]:
+    def create_product(self, product: Product) -> None:
+        """Create product on pirpos.
+
+        Parameters
+        ----------
+        product : Product
+            product to create
+        """
+        raise NotImplementedError("Method not implemented yet.")
+
+    def get_invoices(self, init_day: datetime, end_day: datetime) -> List[Invoice]:
         """Get invoices from pirpos.
 
         Parameters
@@ -306,6 +334,36 @@ class PirposConnector(PlatformConnector):
                 break
 
         return invoices_per_client
+
+    def create_invoice(self, invoice: Invoice) -> None:
+        """Create an invoice on pirpos.
+
+        Parameters
+        ----------
+        invoice : Invoice
+            invoice to create
+        """
+        raise NotImplementedError("Method not implemented yet.")
+
+    def update_invoice(self, invoice: Invoice) -> None:
+        """Update an invoice on pirpos.
+
+        Parameters
+        ----------
+        invoice : Invoice
+            invoice to update
+        """
+        raise NotImplementedError("Method not implemented yet.")
+
+    def credit_note(self, invoice: Invoice) -> None:
+        """Create credit/anulate note for an invoice.
+
+        Parameters
+        ----------
+        invoice : Invoice
+            invoice to anulate
+        """
+        raise NotImplementedError("Method not implemented yet.")
 
 
 if __name__ == "__main__":

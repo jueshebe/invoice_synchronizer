@@ -9,6 +9,7 @@ from invoice_synchronizer.domain.models.taxes import TaxType
 class Product(BaseModel):
     """Product info."""
 
+    product_id: str
     name: str
     base: float
     final_price: float

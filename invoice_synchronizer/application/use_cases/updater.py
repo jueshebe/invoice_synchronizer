@@ -5,7 +5,7 @@ from logging import Logger
 from datetime import datetime
 import json
 import logging
-from invoice_synchronizer.domain import PlatformConnector, User
+from invoice_synchronizer.domain import PlatformConnector, User, InvoiceStatus
 from invoice_synchronizer.application.use_cases.utils import (
     get_missing_outdated_clients,
     save_error,
@@ -53,7 +53,9 @@ class Updater:
                 self.target_client.create_client(client)
                 self.logger.info("%s/%s clients created", counter + 1, len(missing_clients))
             except Exception as error:
-                self.logger.error("Error with client %s check clients_errors.json", client.document)
+                self.logger.error(
+                    "Error with client %s check clients_errors.json", client.document_number
+                )
                 error_data = {
                     "type_op": "Creating",
                     "client": json.loads(client.json()),
@@ -62,17 +64,18 @@ class Updater:
                 }
                 save_error(error_data, "clients_errors.json")
 
-        for counter, difference_data in enumerate(outdated_clients):
+        for counter, outdated_client in enumerate(outdated_clients):
             try:
-                self.target_client.update_client(difference_data[0])
+                self.target_client.update_client(outdated_client)
                 self.logger.info("%s/%s clients updated", counter + 1, len(outdated_clients))
             except Exception as error:
                 self.logger.error(
-                    "Error with client %s check clients_errors.json", difference_data[0].document
+                    "Error with client %s check clients_errors.json",
+                    outdated_client.document_number,
                 )
                 error_data = {
                     "type_op": "Updating",
-                    "client": json.loads(client.json()),
+                    "client": json.loads(outdated_client.json()),
                     "error": str(error),
                 }
                 save_error(error_data, "clients_error.json")
@@ -107,18 +110,18 @@ class Updater:
                 }
                 save_error(error_data, "products_error.json")
 
-        for counter, difference_data in enumerate(outdated_products):
+        for counter, outdated_product in enumerate(outdated_products):
             try:
-                self.target_client.update_product(difference_data[0])
+                self.target_client.update_product(outdated_product)
                 self.logger.info("%s/%s products updated", counter + 1, len(outdated_products))
 
             except Exception as error:
                 self.logger.error(
-                    "Error with product %s check products_errors.json", difference_data[0].name
+                    "Error with product %s check products_errors.json", outdated_product.name
                 )
                 error_data = {
                     "type_op": "Updating",
-                    "client": json.loads(difference_data[0].json()),
+                    "client": json.loads(outdated_product.json()),
                     "error": str(error),
                 }
                 save_error(error_data, "products_error.json")
@@ -126,8 +129,12 @@ class Updater:
     def update_invoices(self, init_date: datetime, end_day: datetime) -> None:
         """Update and create invoices on target from source data."""
         self.logger.info("Updating invoices")
-        ref_invoices = self.source_client.get_invoices(init_date, end_day)
-        unchecked_invoices = self.target_client.get_invoices(init_date, end_day)
+        ref_invoices = self.source_client.get_invoices(
+            init_date, end_day, invoice_status=[InvoiceStatus.PAID]
+        )
+        unchecked_invoices = self.target_client.get_invoices(
+            init_date, end_day, invoice_status=[InvoiceStatus.PAID]
+        )
 
         # get missing and ourdated clients
         (
@@ -140,20 +147,19 @@ class Updater:
         for ref_invoice in ref_invoices:
             total += ref_invoice.total
 
-        for counter, difference_data in enumerate(outdated_invoices):
-            invoice = difference_data[0]
+        for counter, invoice in enumerate(outdated_invoices):
             try:
                 self.target_client.update_invoice(invoice)
                 self.logger.info("%s/%s invoice updated", counter + 1, len(outdated_invoices))
             except Exception as error:
                 self.logger.error(
                     "Error with invoice %s%s check invoices_error.json",
-                    invoice.invoice_prefix,
-                    invoice.invoice_number,
+                    invoice.invoice_id.prefix,
+                    invoice.invoice_id.number,
                 )
                 error_data = {
                     "type_op": "Updating",
-                    "invoice": json.loads(difference_data[0].json()),
+                    "invoice": json.loads(invoice.json()),
                     "error": str(error),
                 }
                 save_error(error_data, "../invoices_error.json")
@@ -169,7 +175,7 @@ class Updater:
                     self.target_client.create_invoice(invoice)
                     self.logger.info(
                         "%s | %s/%s invoices created",
-                        invoice.invoice_number,
+                        invoice.invoice_id.number,
                         counter + 1,
                         len(missing_invoices),
                     )
@@ -177,8 +183,8 @@ class Updater:
                     failed_invoices.append(invoice)
                     self.logger.warning(
                         "Error with invoice %s%s\nerror: %s",
-                        invoice.invoice_prefix,
-                        invoice.invoice_number,
+                        invoice.invoice_id.prefix,
+                        invoice.invoice_id.number,
                         error,
                     )
                     # self.logger.error(
@@ -198,16 +204,18 @@ class Updater:
             if len(missing_invoices) == 0:
                 break
 
-    def update_canceled_invoices(self, init_date: datetime, end_day: datetime) -> None:
+    def update_anulated_invoices(self, init_date: datetime, end_day: datetime) -> None:
         self.logger.info("Checking canceled invoices")
         ref_invoices = self.source_client.get_invoices(
-            init_date, end_day, status=InvoiceStatus.CANCELED
+            init_date, end_day, invoice_status=[InvoiceStatus.ANULATED]
         )
-        unchecked_invoices = self.target_client.get_invoices(init_date, end_day)
+        unchecked_invoices = self.target_client.get_invoices(
+            init_date, end_day, invoice_status=[InvoiceStatus.ANULATED]
+        )
 
         (
             missing_invoices,
-            outdated_invoices,
+            _,
             _,
         ) = get_missing_outdated_invoices(ref_invoices, unchecked_invoices)
 
@@ -215,17 +223,18 @@ class Updater:
             failed_invoices = []
             for counter, invoice in enumerate(missing_invoices):
                 try:
-                    if not invoice.payment_method:
+                    if not invoice.payments:
                         self.logger.info(
                             "Invoice without payment method %s%s",
-                            invoice.invoice_prefix,
-                            invoice.invoice_number,
+                            invoice.invoice_id.prefix,
+                            invoice.invoice_id.number,
                         )
                         continue
                     self.target_client.create_invoice(invoice)
+                    self.target_client.credit_note(invoice)
                     self.logger.info(
-                        "%s | %s/%s invoices created",
-                        invoice.invoice_number,
+                        "%s | %s/%s invoices created and anulated",
+                        invoice.invoice_id.number,
                         counter + 1,
                         len(missing_invoices),
                     )
@@ -233,12 +242,13 @@ class Updater:
                     failed_invoices.append(invoice)
                     self.logger.warning(
                         "Error with invoice %s%s\nerror: %s",
-                        invoice.invoice_prefix,
-                        invoice.invoice_number,
+                        invoice.invoice_id.prefix,
+                        invoice.invoice_id.number,
                         error,
                     )
                     # self.logger.error(
-                    #     f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number} check invoices_error.json"
+                    #     f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number}
+                    # check invoices_error.json"
                     # )
                     # error_data = {
                     #     "type_op": "Creating",
@@ -254,26 +264,3 @@ class Updater:
                 break
 
         self.logger.info("Anulating invoices")
-
-        unchecked_invoices = self.siigo_client.get_siigo_invoices(init_date, end_day)
-
-        invoices_to_delete = filter_only_deleted_invoices(ref_invoices, unchecked_invoices)
-
-        for _ in range(4):
-            failed_invoices = []
-            for counter, invoice in enumerate(invoices_to_delete):
-                try:
-                    # self.siigo_client.remove_invoice(invoice)
-                    self.siigo_client.credit_note(invoice)
-                    self.logger.info(
-                        f"{invoice.invoice_number} | {counter + 1}/{len(ref_invoices)} invoices with credit note"
-                    )
-                except Exception as error:
-                    failed_invoices.append(invoice)
-                    self.logger.warning(
-                        f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number}\nerror: {error}"
-                    )
-            if len(failed_invoices) == 0:
-                break
-            else:
-                invoices_to_delete = copy(failed_invoices)

@@ -1,69 +1,53 @@
 """utils for services."""
 
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict
 from os import path
 import json
-from invoice_synchronizer.models import Client, Product, Invoice
+from invoice_synchronizer.domain import User, Product, Invoice
 
 
 def get_missing_outdated_clients(
-    ref_clients: List[Client],
-    unchecked_clients: List[Client],
-    default_client: Client,
-) -> Tuple[List[Client], List[Tuple[Client, Dict[str, Any]]]]:
+    ref_clients: List[User],
+    unchecked_clients: List[User],
+    default_client: User,
+) -> Tuple[List[User], List[User]]:
     """Divide unchecked_clients in missing_clients and outdated_clients.
 
     Parameters
     ----------
-    ref_clients : List[Client]
-        Reference used as updated clients
-    unchecked_clients : List[Client]
-        Unchecked clients
+    ref_clients : List[User]
+        Reference clients. This is the source of truth.
+    unchecked_clients : List[User]
+        Clients to check against the reference clients.
 
     Returns
     -------
-    Tuple[List[Client], List[Client]]
+    Tuple[List[User], List[User]]
     """
-    unchecked_documents = [client.document for client in unchecked_clients]
+    unchecked_documents = [client.document_number for client in unchecked_clients]
 
     missing_clients = [
-        client for client in ref_clients if client.document not in unchecked_documents
+        client for client in ref_clients if client.document_number not in unchecked_documents
     ]
 
-    present_ref_clients: List[Client] = [
+    present_ref_clients: List[User] = [
         client
         for client in ref_clients
-        if client.document in unchecked_documents and client.document != default_client.document
+        if client.document_number in unchecked_documents
+        and client.document_number != default_client.document_number
     ]
 
-    outdated_clients: List[Tuple[Client, Dict[str, Any]]] = []
+    outdated_clients: List[User] = []
     for ref_client in present_ref_clients:
 
-        def filter_outdated_clients(client: Client) -> bool:
+        def filter_outdated_clients(client: User) -> bool:
             """Get outdated_clients."""
-            return client.document == ref_client.document
+            return client.document_number == ref_client.document_number
 
-        unchecked_client: Client = list(filter(filter_outdated_clients, unchecked_clients))[
-            0
-        ]  # TODO: is supposed Siigo does not repear docuemnt clients
+        unchecked_client: User = list(filter(filter_outdated_clients, unchecked_clients))[0]
 
-        unchecked_dict = unchecked_client.dict()
-        ref_dict = ref_client.dict()
-        for key in ref_dict:
-            if (
-                key not in ["siigo_id", "pirpos_id", "check_digit"]
-                and unchecked_dict[key] != ref_dict[key]
-            ):
-                if key == "name":
-                    name1 = unchecked_client.name.replace(" ", "")
-                    name2 = ref_client.name.replace(" ", "")
-                    if name1 == name2:
-                        continue
-
-                ref_client.siigo_id = unchecked_client.siigo_id
-                difference = {key: unchecked_dict[key]}
-                outdated_clients.append((ref_client, difference))
-                break
+        if ref_client != unchecked_client:
+            outdated_clients.append(ref_client)
 
     return (missing_clients, outdated_clients)
 
@@ -71,7 +55,7 @@ def get_missing_outdated_clients(
 def get_missing_outdated_products(
     ref_products: List[Product],
     unchecked_products: List[Product],
-) -> Tuple[List[Product], List[Tuple[Product, Dict[str, Any]]]]:
+) -> Tuple[List[Product], List[Product]]:
     """Divide unchecked_clients in missing_clients and outdated_clients."""
     unchecked_id = [product.product_id for product in unchecked_products]
 
@@ -83,7 +67,7 @@ def get_missing_outdated_products(
         product for product in ref_products if product.product_id in unchecked_id
     ]
 
-    outdated_products: List[Tuple[Product, Dict[str, Any]]] = []
+    outdated_products: List[Product] = []
     for ref_product in present_ref_products:
 
         def filter_outdated_product(product: Product) -> bool:
@@ -94,15 +78,8 @@ def get_missing_outdated_products(
             0
         ]  # TODO: is supposed Siigo does not repear docuemnt clients
 
-        unchecked_dict = unchecked_product.dict()
-        ref_dict = ref_product.dict()
-        for key in ref_dict:
-            if key not in ["siigo_id", "product_id"] and unchecked_dict[key] != ref_dict[key]:
-
-                ref_product.siigo_id = unchecked_product.siigo_id
-                difference = {key: unchecked_dict[key]}
-                outdated_products.append((ref_product, difference))
-                break
+        if ref_product != unchecked_product:
+            outdated_products.append(ref_product)
 
     return (missing_products, outdated_products)
 
@@ -110,75 +87,48 @@ def get_missing_outdated_products(
 def get_missing_outdated_invoices(
     ref_invoices: List[Invoice],
     unchecked_invoices: List[Invoice],
-) -> Tuple[List[Invoice], List[Tuple[Invoice, Dict[str, Any]]], List[Invoice]]:
+) -> Tuple[List[Invoice], List[Invoice], List[Invoice]]:
     """Divide unchecked_invoices in missing_invoices and outdated_invoices."""
     unchecked_numbers: List[str] = [
-        f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}"
-        for invoice in unchecked_invoices
+        f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}" for invoice in unchecked_invoices
     ]
 
     ref_invoices_numbers: List[str] = [
-        f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}" for invoice in ref_invoices
+        f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}" for invoice in ref_invoices
     ]
 
     missing_invoices = [
         invoice
         for invoice in ref_invoices
-        if f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}" not in unchecked_numbers
+        if f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}" not in unchecked_numbers
     ]
 
-    must_be_deleted_invoices = [
+    must_be_deleted_invoices: List[Invoice] = [
         invoice
         for invoice in unchecked_invoices
-        if f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}" not in ref_invoices_numbers
+        if f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}" not in ref_invoices_numbers
     ]
 
     present_ref_invoices: List[Invoice] = [
         invoice
         for invoice in ref_invoices
-        if f"{invoice.invoice_prefix.siigo_id}{invoice.invoice_number}" in unchecked_numbers
+        if f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}" in unchecked_numbers
     ]
 
-    outdated_invoices: List[Tuple[Invoice, Dict[str, Any]]] = []
+    outdated_invoices: List[Invoice] = []
     for ref_invoice in present_ref_invoices:
 
         def filter_outdated_invoice(invoice: Invoice) -> bool:
             """Get outdated_invoices."""
             return (
-                invoice.invoice_prefix.siigo_id == ref_invoice.invoice_prefix.siigo_id
-                and invoice.invoice_number == ref_invoice.invoice_number
+                invoice.invoice_id.prefix == ref_invoice.invoice_id.prefix
+                and invoice.invoice_id.number == ref_invoice.invoice_id.number
             )
 
-        unchecked_invoice: Invoice = list(filter(filter_outdated_invoice, unchecked_invoices))[
-            0
-        ]  # TODO: is supposed Siigo does not repear docuemnt clients
+        unchecked_invoice: Invoice = list(filter(filter_outdated_invoice, unchecked_invoices))[0]
 
-        unchecked_dict = unchecked_invoice.dict()
-        ref_dict = ref_invoice.dict()
-        for key in ref_dict:
-            if (
-                key
-                not in [
-                    "siigo_id",
-                    "invoice_prefix",
-                    "cachier",
-                    "seller",
-                    "products",
-                    "payment_method",
-                ]  # TODO: Make better this check
-                and unchecked_dict[key] != ref_dict[key]
-            ):
-                if key == "client":
-                    if unchecked_invoice.client.document == ref_invoice.client.document:
-                        continue
-                if key == "created_on":
-                    if unchecked_invoice.created_on.date() == ref_invoice.created_on.date():
-                        continue
-
-                ref_invoice.siigo_id = unchecked_invoice.siigo_id
-                difference = {key: unchecked_dict[key]}
-                outdated_invoices.append((ref_invoice, difference))
-                break
+        if ref_invoice != unchecked_invoice:
+            outdated_invoices.append((ref_invoice))
 
     return (missing_invoices, outdated_invoices, must_be_deleted_invoices)
 
