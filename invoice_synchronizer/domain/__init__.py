@@ -15,6 +15,14 @@ from invoice_synchronizer.domain.models import (
 
 from invoice_synchronizer.domain.repositories.platform_connector import PlatformConnector
 
+from invoice_synchronizer.domain.errors.errors import (
+    ConfigError,
+    AuthenticationError,
+    FetchDataError,
+    UploadError,
+    UpdateError,
+)
+
 __all__ = [
     "PaymentType",
     "Payment",
@@ -29,4 +37,9 @@ __all__ = [
     "DocumentType",
     "User",
     "PlatformConnector",
+    "ConfigError",
+    "AuthenticationError",
+    "FetchDataError",
+    "UploadError",
+    "UpdateError",
 ]

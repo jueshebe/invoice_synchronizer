@@ -109,127 +109,50 @@ def create_product(
     return products
 
 
-def get_prefix_map(configuration: Pirpos2SiigoMap, key_value: Union[str, int]) -> InvoiceMap:
-    """Find prefix mapping."""
-    for prefix_map in configuration.prefix_map:
-        if key_value in [prefix_map.prefix, prefix_map.siigo_id]:
-            return prefix_map
-    raise ValueError(
-        f"key_value {key_value} not recognized for prefix map, check configuration file."
-    )
+def create_invoice():
+    pass
 
 
-def get_payment_map(configuration: Pirpos2SiigoMap, key_value: Union[str, int]) -> Payment:
-    """Find prefix mapping."""
-    payments_map = configuration.payment_map
-    for payment_map in payments_map:
-        if key_value in [payment_map.pirpos_name, payment_map.siigo_id]:
-            return payment_map
-    raise ValueError(
-        f"key_value {key_value} not recognized for payments map, check configuration file."
-    )
-
-
-def create_invoice(
-    configuration: Pirpos2SiigoMap,
-    cachier_name: str,
-    cachier_id: str,
-    seller_name: str,
-    seller_id: str,
-    client: User,
-    created_on: datetime,
-    invoice_prefix: str,
-    invoice_number: int,
-    payments: List[Tuple[Union[str, int], float]],
-    invoice_products: List[Tuple[Product, float, int, str]],
-    total: float,
-    siigo_id: Optional[str] = None,
-) -> Invoice:
-    """Create invoice."""
-    return Invoice(
-        siigo_id=siigo_id,
-        cachier=User(name=cachier_name, employee_id=cachier_id),
-        seller=User(name=seller_name, employee_id=seller_id),
-        client=client,
-        created_on=datetime(created_on.year, created_on.month, created_on.day),
-        invoice_prefix=get_prefix_map(configuration, invoice_prefix),
-        invoice_number=invoice_number,
-        payment_method=[
-            (
-                get_payment_map(configuration, payment[0]),
-                payment[1],
-            )
-            for payment in payments
-            if payment[1]
-        ],
-        products=[
-            Product(
-                product=invoice_product[0],
-                price=invoice_product[1],
-                quantity=invoice_product[2],
-                tax=get_tax_map(configuration, invoice_product[3]),
-            )
-            for invoice_product in invoice_products
-        ],
-        total=total,
-    )
-
-
-class ErrorConfigPirposSiigo(Exception):
-    """File provided doesn't have correct information."""
-
-
-class ErrorPirposToken(Exception):
-    """Can't obtain pirpos token."""
-
-
-class ErrorLoadingPirposClients(Exception):
-    """Can't download Pirpos clients."""
-
-
-class ErrorLoadingPirposProducts(Exception):
-    """Can't download Pirpos clients."""
-
-
-class ErrorLoadingPirposInvoices(Exception):
-    """Can't download Pirpos Invoices."""
-
-
-class ErrorSiigoToken(Exception):
-    """Can't obtain siigo token."""
-
-
-class ErrorLoadingSiigoClients(Exception):
-    """Can't download Siigo clients."""
-
-
-class ErrorLoadingSiigoProducts(Exception):
-    """Can't download Siigo clients."""
-
-
-class ErrorLoadingSiigoInvoices(Exception):
-    """Can't download Siigo Invoices."""
-
-
-class ErrorCreatingSiigoClient(Exception):
-    """Can't create client."""
-
-
-class ErrorUpdatingSiigoClient(Exception):
-    """Can't update client."""
-
-
-class ErrorCreatingSiigoProduct(Exception):
-    """Can't create product."""
-
-
-class ErrorUpdatingSiigoProduct(Exception):
-    """Can't update product."""
-
-
-class ErrorCreatingSiigoInvoice(Exception):
-    """Can't create invoice."""
-
-
-class ErrorUpdatingSiigoInvoice(Exception):
-    """Can't update invoice."""
+# def create_invoice(
+#     configuration: Pirpos2SiigoMap,
+#     cachier_name: str,
+#     cachier_id: str,
+#     seller_name: str,
+#     seller_id: str,
+#     client: User,
+#     created_on: datetime,
+#     invoice_prefix: str,
+#     invoice_number: int,
+#     payments: List[Tuple[Union[str, int], float]],
+#     invoice_products: List[Tuple[Product, float, int, str]],
+#     total: float,
+#     siigo_id: Optional[str] = None,
+# ) -> Invoice:
+#     """Create invoice."""
+#     return Invoice(
+#         siigo_id=siigo_id,
+#         cachier=User(name=cachier_name, employee_id=cachier_id),
+#         seller=User(name=seller_name, employee_id=seller_id),
+#         client=client,
+#         created_on=datetime(created_on.year, created_on.month, created_on.day),
+#         invoice_prefix=get_prefix_map(configuration, invoice_prefix),
+#         invoice_number=invoice_number,
+#         payment_method=[
+#             (
+#                 get_payment_map(configuration, payment[0]),
+#                 payment[1],
+#             )
+#             for payment in payments
+#             if payment[1]
+#         ],
+#         products=[
+#             Product(
+#                 product=invoice_product[0],
+#                 price=invoice_product[1],
+#                 quantity=invoice_product[2],
+#                 tax=get_tax_map(configuration, invoice_product[3]),
+#             )
+#             for invoice_product in invoice_products
+#         ],
+#         total=total,
+#     )

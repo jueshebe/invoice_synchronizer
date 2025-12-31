@@ -15,22 +15,14 @@ from invoice_synchronizer.domain import (
     Product,
     Invoice,
     TaxType,
+    InvoiceStatus,
 )
 from invoice_synchronizer.infrastructure.repositories.utils import (
-    load_pirpos2siigo_config,
     create_client,
     create_invoice,
-    ErrorSiigoToken,
-    ErrorLoadingSiigoClients,
-    ErrorLoadingSiigoProducts,
-    ErrorLoadingSiigoInvoices,
-    ErrorCreatingSiigoClient,
-    ErrorCreatingSiigoProduct,
-    ErrorCreatingSiigoInvoice,
-    ErrorUpdatingSiigoClient,
-    ErrorUpdatingSiigoProduct,
-    ErrorUpdatingSiigoInvoice,
 )
+from invoice_synchronizer.infrastructure.config import SiigoConfig
+from invoice_synchronizer.domain import AuthenticationError
 
 
 class SiigoConnector:
@@ -38,24 +30,23 @@ class SiigoConnector:
 
     def __init__(
         self,
-        siigo_username: str = os.environ["SIIGO_USER_NAME"],
-        siigo_access_key: str = os.environ["SIIGO_ACCESS_KEY"],
-        configuration_path: str = "configuration.JSON",
+        siigo_config: SiigoConfig,
         logger: Logger = logging.getLogger(),
     ):
         """Parameters used to make a connection."""
         # Siigo API info
         self.__logger = logger
-        self.__siigo_username = siigo_username
-        self.__siigo_access_key = siigo_access_key
-        self.__configuration = load_pirpos2siigo_config(configuration_path)
-        self.__siigo_access_token = self.__get_siigo_access_token()
+        self.__siigo_username = siigo_config.siigo_username
+        self.__siigo_access_key = siigo_config.siigo_access_key
+        self.__configuration = siigo_config.system_mapping
         self.__products: List[Product]
         self.__clients: List[User]
         self.__page_size = 100
         self.__batch_products: int = 100
+        self.__timeout = siigo_config.timeout
         # self.get_siigo_clients()
         # self.get_siigo_products()
+        self.__siigo_access_token = self.__get_siigo_access_token()
         logger.info("Siigo connector initialized.")
 
     def __get_siigo_access_token(self) -> str:
@@ -78,17 +69,19 @@ class SiigoConnector:
             "access_key": self.__siigo_access_key,
         }
         headers = {"Content-Type": "application/json; charset=UTF-8"}
-        response = requests.post(url, data=json.dumps(values), headers=headers)
+        response = requests.post(
+            url, data=json.dumps(values), headers=headers, timeout=self.__timeout
+        )
 
         if not response.ok:
-            raise ErrorSiigoToken("Error solicitando token, revisar userName y access_key")
+            raise AuthenticationError("Error solicitando token, revisar userName y access_key")
         data = response.json()
 
         if "access_token" in data.keys():
             access_token = data["access_token"]
             assert isinstance(access_token, str)
         else:
-            raise ErrorSiigoToken("access_token key is not present in the respose")
+            raise AuthenticationError("access_token key is not present in the respose")
 
         return access_token
 

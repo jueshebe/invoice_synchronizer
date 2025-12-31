@@ -8,17 +8,19 @@ import logging
 import time
 from datetime import datetime, timedelta
 import requests  # type: ignore
-from invoice_synchronizer.domain import User, Product, Invoice, PlatformConnector
+from invoice_synchronizer.domain import (
+    User,
+    Product,
+    Invoice,
+    PlatformConnector,
+    AuthenticationError,
+)
 from invoice_synchronizer.infrastructure.repositories.utils import (
-    load_pirpos2siigo_config,
     create_client,
     create_product,
     create_invoice,
-    ErrorPirposToken,
-    ErrorLoadingPirposClients,
-    ErrorLoadingPirposProducts,
-    ErrorLoadingPirposInvoices,
 )
+from invoice_synchronizer.infrastructure.config import PirposConfig
 
 
 class PirposConnector(PlatformConnector):
@@ -26,22 +28,19 @@ class PirposConnector(PlatformConnector):
 
     def __init__(
         self,
-        pirpos_username: str,
-        pirpos_password: str,
-        configuration_path: str,
-        batch_size: int = 200,
+        pirpos_config: PirposConfig,
         logger: Logger = logging.getLogger(),
     ):
         """Parameters used to make a connection."""
         self.__logger = logger
-        self.__pirpos_username = pirpos_username
-        self.__pirpos_password = pirpos_password
-        self.__configuration = load_pirpos2siigo_config(configuration_path)
-        self.__pirpos_access_token = self.__get_pirpos_access_token()
-        self.__batch_size = batch_size
-        self.__requests_timeout = 10
+        self.__pirpos_username = pirpos_config.pirpos_username
+        self.__pirpos_password = pirpos_config.pirpos_password
+        self.__configuration = pirpos_config.system_mapping
+        self.__batch_size = pirpos_config.batch_size
+        self.__requests_timeout = pirpos_config.timeout
         self.__days_step = 10
 
+        self.__pirpos_access_token = self.__get_pirpos_access_token()
         self.__logger.info("Pirpos connector initialized.")
 
     def __get_pirpos_access_token(self) -> str:
@@ -68,14 +67,14 @@ class PirposConnector(PlatformConnector):
         )
 
         if not response.ok:
-            raise ErrorPirposToken("Error getting Pirpos token, check email and password")
+            raise AuthenticationError("Error getting Pirpos token, check email and password")
 
         data = response.json()
         if "tokenCurrent" in data.keys():
             access_token = data["tokenCurrent"]
             assert isinstance(access_token, str)
         else:
-            raise ErrorPirposToken("tokenCurrent key is not present in the respose")
+            raise AuthenticationError("tokenCurrent key is not present in the respose")
 
         return access_token
 
@@ -208,6 +207,16 @@ class PirposConnector(PlatformConnector):
         ----------
         product : Product
             product to create
+        """
+        raise NotImplementedError("Method not implemented yet.")
+
+    def update_product(self, product: Product) -> None:
+        """Update product on pirpos.
+
+        Parameters
+        ----------
+        product : Product
+            product to update
         """
         raise NotImplementedError("Method not implemented yet.")
 
