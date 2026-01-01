@@ -18,7 +18,6 @@ from invoice_synchronizer.domain import (
     InvoiceStatus,
 )
 from invoice_synchronizer.infrastructure.repositories.utils import (
-    create_client,
     create_invoice,
 )
 from invoice_synchronizer.infrastructure.config import SiigoConfig

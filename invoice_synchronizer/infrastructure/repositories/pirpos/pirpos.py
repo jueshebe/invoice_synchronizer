@@ -14,9 +14,9 @@ from invoice_synchronizer.domain import (
     Invoice,
     PlatformConnector,
     AuthenticationError,
+    FetchDataError,
 )
 from invoice_synchronizer.infrastructure.repositories.utils import (
-    create_client,
     create_product,
     create_invoice,
 )
@@ -39,6 +39,7 @@ class PirposConnector(PlatformConnector):
         self.__batch_size = pirpos_config.batch_size
         self.__requests_timeout = pirpos_config.timeout
         self.__days_step = 10
+        self.__default_user = pirpos_config.default_user
 
         self.__pirpos_access_token = self.__get_pirpos_access_token()
         self.__logger.info("Pirpos connector initialized.")
@@ -103,7 +104,7 @@ class PirposConnector(PlatformConnector):
                 "GET", url, headers=headers, timeout=self.__requests_timeout
             )
             if not response.ok:
-                raise ErrorLoadingPirposClients(f"Can't download PirPos clients\n {response.text}")
+                raise FetchDataError(f"Can't download PirPos clients\n {response.text}")
 
             data = response.json()["data"]  # TODO: check incoming data with BaseModel class
             if len(data) == 0:
@@ -111,23 +112,23 @@ class PirposConnector(PlatformConnector):
 
             for client_data in data:
                 name = client_data["name"]
-                client = create_client(
-                    configuration_file=self.__configuration,
+                # pirpos_id=client_data.get("_id"),
+                client = User.create_user_with_defaults(
+                    default_user=self.__default_user,
                     name=name,
-                    siigo_id=None,
-                    pirpos_id=client_data.get("_id"),
-                    email=client_data.get("email"),
-                    phone=client_data.get("phone"),
-                    address=client_data.get("address"),
+                    last_name=client_data.get("lastName"),
+                    document_type=client_data.get("idDocumentType"),
                     document=client_data.get("document"),
                     check_digit=client_data.get("checkDigit"),
-                    document_type=client_data.get("idDocumentType"),
-                    responsibilities=client_data.get("responsibilities"),
                     city_name=client_data.get("cityDetail", {}).get("cityName"),
                     city_state=client_data.get("cityDetail", {}).get("stateName"),
                     city_code=client_data.get("cityDetail", {}).get("cityCode"),
                     country_code=client_data.get("cityDetail", {}).get("countryCode"),
                     state_code=client_data.get("cityDetail", {}).get("stateCode"),
+                    responsibilities=client_data.get("responsibilities"),
+                    email=client_data.get("email"),
+                    phone=client_data.get("phone"),
+                    address=client_data.get("address"),
                 )
                 clients.append(client)
             page += 1

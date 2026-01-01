@@ -1,7 +1,7 @@
 """Model for clients."""
 
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 from pydantic import BaseModel, validator
 from invoice_synchronizer.domain.models.utils import normalize
 
@@ -89,6 +89,82 @@ class User(BaseModel):
         str
         """
         return phone.replace(" ", "")
+
+    @classmethod
+    def clean_document(cls, document: Union[str, int]) -> int:
+        """Read client document and validate it.
+
+        Parameters
+        ----------
+        document : Union[str, int]
+            ex: 9 0 1 5 4 7 7 5 7 - 3
+
+        Returns
+        -------
+        str
+            return -> '901547757'.
+        """
+        if isinstance(document, int):
+            return document
+
+        document_str = document.replace(" ", "")
+        if "-" in document_str:
+            document_str = document_str[: document_str.find("-")]
+        return int(document_str)
+
+    @classmethod
+    def create_user_with_defaults(
+        cls,
+        default_user: "User",
+        name: str,
+        last_name: Optional[str] = None,
+        document_type: Optional[int] = None,
+        document: Optional[str] = None,
+        check_digit: Optional[int] = None,
+        city_name: Optional[str] = None,
+        city_state: Optional[str] = None,
+        city_code: Optional[str] = None,
+        country_code: Optional[str] = None,
+        state_code: Optional[str] = None,
+        responsibilities: Optional[str] = None,
+        email: Optional[str] = None,
+        phone: Optional[str] = None,
+        address: Optional[str] = None,
+    ) -> "User":
+        """Create client object."""
+        # Map document_type integer to DocumentType enum if provided
+        if document_type is not None:
+            mapped_document_type = DocumentType(document_type)
+        else:
+            mapped_document_type = default_user.document_type
+
+        if responsibilities is not None:
+            responsibilities_map = Responsibilities(responsibilities)
+        else:
+            responsibilities_map = default_user.responsibilities
+
+        return User(
+            name=name,
+            last_name=last_name,
+            document_type=mapped_document_type,
+            document_number=(
+                cls.clean_document(document) if document else default_user.document_number
+            ),
+            check_digit=check_digit if check_digit else default_user.check_digit,
+            city_detail=CityDetail(
+                city_name=city_name if city_name else default_user.city_detail.city_name,
+                city_state=city_state if city_state else default_user.city_detail.city_state,
+                city_code=city_code if city_code else default_user.city_detail.city_code,
+                country_code=(
+                    country_code if country_code else default_user.city_detail.country_code
+                ),
+                state_code=state_code if state_code else default_user.city_detail.state_code,
+            ),
+            responsibilities=responsibilities_map,
+            email=email if email else default_user.email,
+            phone=phone if phone else default_user.phone,
+            address=address if address else default_user.address,
+        )
 
     def __eq__(self, other: object) -> bool:
         """Compare two users based on their document number."""
