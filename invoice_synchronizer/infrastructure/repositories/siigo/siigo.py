@@ -16,12 +16,15 @@ from invoice_synchronizer.domain import (
     Invoice,
     TaxType,
     InvoiceStatus,
+    AuthenticationError,
+    FetchDataError,
+    UploadError,
+    UpdateError,
 )
 from invoice_synchronizer.infrastructure.repositories.utils import (
     create_invoice,
 )
 from invoice_synchronizer.infrastructure.config import SiigoConfig
-from invoice_synchronizer.domain import AuthenticationError
 
 
 class SiigoConnector:
@@ -40,11 +43,12 @@ class SiigoConnector:
         self.__configuration = siigo_config.system_mapping
         self.__products: List[Product]
         self.__clients: List[User]
-        self.__page_size = 100
+        self.__page_size = 500
         self.__batch_products: int = 100
         self.__timeout = siigo_config.timeout
         # self.get_siigo_clients()
         # self.get_siigo_products()
+        self.default_client = siigo_config.default_user
         self.__siigo_access_token = self.__get_siigo_access_token()
         logger.info("Siigo connector initialized.")
 
@@ -84,7 +88,7 @@ class SiigoConnector:
 
         return access_token
 
-    def get_clients(self) -> None:
+    def get_clients(self) -> List[User]:
         """Load Siigo clients.
 
         Returns
@@ -99,6 +103,7 @@ class SiigoConnector:
             "accept": "application/json, text/plain, */*",
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio",
         }
         page = 1
         clients: List[User] = []
@@ -109,9 +114,10 @@ class SiigoConnector:
                 url.format(page=page),
                 headers=headers,
                 data=payload,
+                timeout=self.__timeout,
             )
             if not response.ok:
-                raise ErrorLoadingSiigoClients(f"Can't download Siigo clients\n {response.text}")
+                raise FetchDataError(f"Can't download Siigo clients\n {response.text}")
 
             data = response.json()["results"]
             if len(data) == 0:
@@ -126,24 +132,19 @@ class SiigoConnector:
                 else:
                     contacts = {}
 
-                name = " ".join(client_data["name"])
-                # if "gral s.a.s" in name:
-                #     xas = 1
+                try:
+                    name = client_data["name"][0]
+                    last_name = " ".join(client_data["name"][1:])
+                except TypeError:
+                    continue
 
-                client = create_client(
-                    configuration_file=self.__configuration,
-                    siigo_id=client_data["id"],
-                    pirpos_id=None,
+                client = User.create_user_with_defaults(
+                    default_user=self.default_client,
                     name=name,
-                    email=contacts.get("email"),
-                    phone=contacts.get("phone", {}).get("number"),
-                    address=client_data.get("address", {}).get("address"),
+                    last_name=last_name,
+                    document_type=int(client_data.get("id_type", {})["code"]),
                     document=client_data.get("identification"),
                     check_digit=client_data.get("check_digit"),
-                    document_type=int(client_data.get("id_type", {})["code"]),
-                    responsibilities=client_data.get("fiscal_responsibilities", [{}])[0].get(
-                        "code"
-                    ),
                     city_name=client_data.get("address", {}).get("city", {}).get("city_name"),
                     city_state=client_data.get("address", {}).get("city", {}).get("state_name"),
                     city_code=client_data.get("address", {})
@@ -151,10 +152,16 @@ class SiigoConnector:
                     .get("city_code"),  # TODO: check this with pirpos. use Enum
                     country_code=client_data.get("address", {}).get("city", {}).get("country_code"),
                     state_code=client_data.get("address", {}).get("city", {}).get("state_code"),
+                    responsibilities=client_data.get("fiscal_responsibilities", [{}])[0].get(
+                        "code"
+                    ),
+                    email=contacts.get("email"),
+                    phone=contacts.get("phone", {}).get("number"),
+                    address=client_data.get("address", {}).get("address"),
                 )
                 clients.append(client)
             page += 1
-        self.__clients = clients
+        return clients
 
     def create_client(self, client: User) -> None:
         """Create client.
@@ -168,12 +175,17 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio",
         }
 
-        full_name = client.name.split(" ")
+        full_name = client.name.split(" ") + (
+            client.last_name.split(" ") if client.last_name else [""]
+        )
+
         name, last_name = [full_name[0], " ".join(full_name[1:])]
-        last_name = last_name if len(last_name) > 0 else name
+        last_name = last_name if len(last_name) > 0 else ""
         last_name = last_name[0:50]
+
         if client.document_type == DocumentType.NIT:
             person_type = "Company"
             client_name = [client.name]
@@ -187,7 +199,7 @@ class SiigoConnector:
             "type": "Customer",
             "person_type": person_type,
             "id_type": str(client.document_type.value),
-            "identification": str(client.document),
+            "identification": str(client.document_number),
             "check_digit": str(client.check_digit),
             "name": client_name,
             "commercial_name": "",
@@ -213,8 +225,8 @@ class SiigoConnector:
             ],
             "contacts": [
                 {
-                    "first_name": name,
-                    "last_name": last_name,
+                    "first_name": client.name,
+                    "last_name": client.last_name if client.last_name else "",
                     "email": client.email,
                     "phone": {
                         "indicative": "",
@@ -232,9 +244,10 @@ class SiigoConnector:
             url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout,
         )
         if not response.ok:
-            raise ErrorCreatingSiigoClient(f"Can't create clients\n {response.text}")
+            raise UploadError(f"Can't create clients\n {response.text}")
 
     def update_client(self, client: User) -> None:
         """Update client.

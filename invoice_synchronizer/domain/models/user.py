@@ -27,7 +27,7 @@ class Responsibilities(Enum):
 
 
 class DocumentType(Enum):
-    """DIAN document types (obtained from siigo api)."""
+    """DIAN document types."""
 
     REGISTRO_CIVIL = 11
     TARJETA_IDENTIDAD = 12
@@ -39,6 +39,7 @@ class DocumentType(Enum):
     TIPO_DOCUMENTO_EXTRANJERO = 42
     SIN_IDENTIFICAR = 43
     PEP = 47
+    PPT = 48
     NIT_OTRO_PAIS = 50
     NUIP = 91
 
@@ -113,6 +114,33 @@ class User(BaseModel):
         return int(document_str)
 
     @classmethod
+    def get_check_digit(cls, document_number: int) -> int:
+        """Calculate check digit from document number.
+
+        Parameters
+        ----------
+        document_number : int
+            client document number
+
+        Returns
+        -------
+        int
+            check digit
+        """
+        weights = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71]
+        doc_str = str(document_number)
+
+        # Ensure document doesn't exceed maximum supported length
+        if len(doc_str) > len(weights):
+            raise ValueError(f"Document number too long. Maximum {len(weights)} digits supported.")
+
+        total = sum(int(doc_str[-(i + 1)]) * weights[i] for i in range(len(doc_str)))
+        remainder = total % 11
+        if remainder > 1:
+            return 11 - remainder
+        return remainder
+
+    @classmethod
     def create_user_with_defaults(
         cls,
         default_user: "User",
@@ -143,14 +171,13 @@ class User(BaseModel):
         else:
             responsibilities_map = default_user.responsibilities
 
+        document_number = cls.clean_document(document) if document else default_user.document_number
         return User(
             name=name,
             last_name=last_name,
             document_type=mapped_document_type,
-            document_number=(
-                cls.clean_document(document) if document else default_user.document_number
-            ),
-            check_digit=check_digit if check_digit else default_user.check_digit,
+            document_number=document_number,
+            check_digit=cls.get_check_digit(document_number),
             city_detail=CityDetail(
                 city_name=city_name if city_name else default_user.city_detail.city_name,
                 city_state=city_state if city_state else default_user.city_detail.city_state,
