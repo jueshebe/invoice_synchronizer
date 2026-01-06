@@ -1,4 +1,5 @@
 """utils to models."""
+
 from typing import Optional
 
 
@@ -14,10 +15,13 @@ def normalize(string_data: Optional[str]) -> str:
         ("ó", "o"),
         ("ú", "u"),
         ("ñ", "n"),
+        ("ń", "n"),
         (".", ""),
         ("'", ""),
     )
-    lower_case = string_data.lower()
+    cleaned = string_data.lower()
     for char1, char2 in replacements:
-        lower_case = lower_case.replace(char1, char2)
-    return lower_case
+        cleaned = cleaned.replace(char1, char2)
+
+    cleaned = cleaned.strip()
+    return cleaned

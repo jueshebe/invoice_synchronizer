@@ -1,7 +1,7 @@
 """Model for products."""
 
 from typing import List, Dict
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from invoice_synchronizer.domain.models.utils import normalize
 from invoice_synchronizer.domain.models.taxes import TaxType
 
@@ -16,7 +16,7 @@ class Product(BaseModel):
     taxes: List[TaxType]
     taxes_values: List[Dict[TaxType, float]]
 
-    @validator("name")
+    @field_validator("name")
     @classmethod
     def clean_name(cls, name: str) -> str:
         """Remove upercase and accents."""

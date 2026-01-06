@@ -1,71 +1,78 @@
-import json
-from typing import Dict, List, Union, Tuple
-from pydantic import BaseModel
+from typing import Dict, Any, Optional
+from invoice_synchronizer.domain import User
+from invoice_synchronizer.domain.models.user import User, DocumentType
 
 
-class PaymentMap(BaseModel):
-    """Payment mapping between pirpos and siigo."""
+def user_to_siigo_payload(client: User, contacts: Optional[Any] = None) -> Dict[str, Any]:
+    """Convert User model to Siigo payload."""
+    full_name = client.name.split(" ") + (client.last_name.split(" ") if client.last_name else [""])
 
-    name: str
-    siigo_id: int
+    name, last_name = [full_name[0].strip(), " ".join(full_name[1:])]
+    last_name = last_name if len(last_name) > 0 else "."
+    last_name = last_name[0:50].strip()
 
+    if client.document_type == DocumentType.NIT:
+        person_type = "Company"
+        if last_name:
+            client_name = [name + " " + last_name]
+        else:
+            client_name = [client.name]
+    else:
+        person_type = "Person"
+        if last_name:
+            client_name = [name, last_name]
+        else:
+            client_name = [name]
+    state_code = str(client.city_detail.state_code)
+    state_code = state_code if len(state_code) > 1 else f"0{state_code}"
 
-class TaxMap(BaseModel):
-    """Tax mapping between pirpos and siigo."""
+    contacts_info = (
+        contacts
+        if contacts
+        else [
+            {
+                "first_name": name,
+                "last_name": last_name,
+                "email": client.email,
+                "phone": {
+                    "indicative": "",
+                    "number": client.phone[0:10],
+                    "extension": "",
+                },
+            }
+        ]
+    )
 
-    name: str
-    siigo_name: str
-    siigo_id: int
-    value: float
-
-
-class InvoiceMap(BaseModel):
-    """Invoice prefix mapping between pirpos and siigo."""
-
-    prefix: str
-    siigo_id: int
-    siigo_code: int
-
-
-class SiigoMap(BaseModel):
-    """Validator for configuration.json file."""
-
-    payment_map: List[PaymentMap]
-    taxes_map: List[TaxMap]
-    prefix_map: List[InvoiceMap]
-    retentions: List[TaxMap]
-
-
-def load_siigo_config(file_path: str) -> SiigoMap:
-    """Read JSON configuration file.
-
-    It contains information of how map Pirpos to Siigo
-
-    Parameters
-    ----------
-    file_path : str
-        file direction
-
-    Returns
-    -------
-        SiigoMap object
-    """
-    try:
-        with open(file_path, "rt", encoding="utf-8") as file:
-            data = json.load(file)
-            return SiigoMap(**data)
-    except Exception as error:
-        raise ValueError(f"""error loading file {file_path}. Error msg: {error}""") from error
-
-
-def get_tax_map(configuration: SiigoMap, name_key: str) -> TaxInfo:
-    """Find tax mapping."""
-    for tax_map in configuration.taxes_map:
-        if name_key in [tax_map.siigo_name, tax_map.pirpos_name]:
-            return TaxInfo(
-                pirpos_name=tax_map.pirpos_name,
-                siigo_name=tax_map.siigo_name,
-                siigo_id=tax_map.siigo_id,
-                value=tax_map.value,
-            )
-    raise ValueError(f"name_key {name_key} not recognized, check configuration file.")
+    payload = {
+        "type": "Customer",
+        "person_type": person_type,
+        "id_type": str(client.document_type.value),
+        "identification": str(client.document_number),
+        "check_digit": str(client.check_digit),
+        "name": client_name,
+        "commercial_name": "",
+        "branch_office": 0,
+        "active": "true",
+        "vat_responsible": "false",
+        "fiscal_responsibilities": [{"code": client.responsibilities.value}],
+        "address": {
+            "address": client.address,
+            "city": {
+                "country_code": str(client.city_detail.country_code),
+                "state_code": state_code,
+                "city_code": str(client.city_detail.city_code),
+            },
+            "postal_code": "",
+        },
+        "phones": [
+            {
+                "indicative": "",
+                "number": client.phone[0:10],
+                "extension": "",
+            }
+        ],
+        "contacts": contacts_info,
+        "comments": "Created from Pirpos2Siigo software",
+        # "related_users": {"seller_id": 629, "collector_id": 629},
+    }
+    return payload

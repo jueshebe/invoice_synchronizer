@@ -1,6 +1,6 @@
 """Siigo client."""
 
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Optional
 import os
 import re
 import time
@@ -20,21 +20,20 @@ from invoice_synchronizer.domain import (
     FetchDataError,
     UploadError,
     UpdateError,
+    PlatformConnector,
 )
 from invoice_synchronizer.infrastructure.repositories.utils import (
     create_invoice,
 )
 from invoice_synchronizer.infrastructure.config import SiigoConfig
+from invoice_synchronizer.infrastructure.repositories.siigo.utils import user_to_siigo_payload
+from invoice_synchronizer.infrastructure.repositories.rate_limiter.rate_limiter import RateLimiter
 
 
-class SiigoConnector:
+class SiigoConnector(PlatformConnector):
     """Class to manage siigo invoices, clients and products."""
 
-    def __init__(
-        self,
-        siigo_config: SiigoConfig,
-        logger: Logger = logging.getLogger(),
-    ):
+    def __init__(self, siigo_config: SiigoConfig, logger: Logger):
         """Parameters used to make a connection."""
         # Siigo API info
         self.__logger = logger
@@ -42,13 +41,13 @@ class SiigoConnector:
         self.__siigo_access_key = siigo_config.siigo_access_key
         self.__configuration = siigo_config.system_mapping
         self.__products: List[Product]
-        self.__clients: List[User]
+        self.__documents_to_id: Dict[int, str] = {}
+        self.__documents_to_raw_user: Dict[int, Any] = {}
         self.__page_size = 500
         self.__batch_products: int = 100
         self.__timeout = siigo_config.timeout
-        # self.get_siigo_clients()
-        # self.get_siigo_products()
         self.default_client = siigo_config.default_user
+        self._rate_limiter = RateLimiter(max_requests_per_minute=90, logger=logger)
         self.__siigo_access_token = self.__get_siigo_access_token()
         logger.info("Siigo connector initialized.")
 
@@ -109,6 +108,7 @@ class SiigoConnector:
         clients: List[User] = []
 
         while True:
+            self._rate_limiter.wait_if_needed()
             response = requests.request(
                 "GET",
                 url.format(page=page),
@@ -134,7 +134,9 @@ class SiigoConnector:
 
                 try:
                     name = client_data["name"][0]
-                    last_name = " ".join(client_data["name"][1:])
+                    last_name: Optional[str] = " ".join(client_data["name"][1:])
+                    if last_name == ".":
+                        last_name = None
                 except TypeError:
                     continue
 
@@ -160,6 +162,8 @@ class SiigoConnector:
                     address=client_data.get("address", {}).get("address"),
                 )
                 clients.append(client)
+                self.__documents_to_id[client.document_number] = client_data["id"]
+                self.__documents_to_raw_user[client.document_number] = client_data
             page += 1
         return clients
 
@@ -177,68 +181,8 @@ class SiigoConnector:
             "content-type": "application/json; charset=UTF-8",
             "Partner-Id": "DesarrolloPropio",
         }
-
-        full_name = client.name.split(" ") + (
-            client.last_name.split(" ") if client.last_name else [""]
-        )
-
-        name, last_name = [full_name[0], " ".join(full_name[1:])]
-        last_name = last_name if len(last_name) > 0 else ""
-        last_name = last_name[0:50]
-
-        if client.document_type == DocumentType.NIT:
-            person_type = "Company"
-            client_name = [client.name]
-        else:
-            person_type = "Person"
-            client_name = [name, last_name]
-        state_code = str(client.city_detail.state_code)
-        state_code = state_code if len(state_code) > 1 else f"0{state_code}"
-
-        payload = {
-            "type": "Customer",
-            "person_type": person_type,
-            "id_type": str(client.document_type.value),
-            "identification": str(client.document_number),
-            "check_digit": str(client.check_digit),
-            "name": client_name,
-            "commercial_name": "",
-            "branch_office": 0,
-            "active": "true",
-            "vat_responsible": "false",
-            "fiscal_responsibilities": [{"code": client.responsibilities.value}],
-            "address": {
-                "address": client.address,
-                "city": {
-                    "country_code": str(client.city_detail.country_code),
-                    "state_code": state_code,
-                    "city_code": str(client.city_detail.city_code),
-                },
-                "postal_code": "",
-            },
-            "phones": [
-                {
-                    "indicative": "",
-                    "number": client.phone[0:10],
-                    "extension": "",
-                }
-            ],
-            "contacts": [
-                {
-                    "first_name": client.name,
-                    "last_name": client.last_name if client.last_name else "",
-                    "email": client.email,
-                    "phone": {
-                        "indicative": "",
-                        "number": client.phone[0:10],
-                        "extension": "",
-                    },
-                }
-            ],
-            "comments": "Created from Pirpos2Siigo software",
-            # "related_users": {"seller_id": 629, "collector_id": 629},
-        }
-
+        payload = user_to_siigo_payload(client)
+        self._rate_limiter.wait_if_needed()
         response = requests.request(
             "POST",
             url,
@@ -261,72 +205,35 @@ class SiigoConnector:
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Partner-Id": "DesarrolloPropio",
         }
+        user_siigo_id = self.__documents_to_id.get(client.document_number)
+        if user_siigo_id is None:
+            self.get_clients()
+            user_siigo_id = self.__documents_to_id.get(client.document_number)
+            if user_siigo_id is None:
+                raise UpdateError(f"Siigo ID for client {client.document_number} not found.")
 
-        full_name = client.name.split(" ")
-        name, last_name = [full_name[0], " ".join(full_name[1:])]
-        last_name = last_name if len(last_name) > 0 else "."
-        last_name = last_name[0:50]
-        if client.document_type == DocumentType.NIT:
-            person_type = "Company"
-            client_name = [client.name]
-        else:
-            person_type = "Person"
-            client_name = [name, last_name]
+        client_url = url.format(siigo_id=user_siigo_id)
+        payload = user_to_siigo_payload(
+            client, self.__documents_to_raw_user[client.document_number].get("contacts")
+        )
 
-        client_url = url.format(siigo_id=client.siigo_id)
-        payload = {
-            "type": "Customer",
-            "person_type": person_type,
-            "id_type": str(client.document_type.value),
-            "identification": str(client.document),
-            "check_digit": str(client.check_digit),
-            "name": client_name,
-            "commercial_name": "",
-            "branch_office": 0,
-            "active": "true",
-            "vat_responsible": "false",
-            "fiscal_responsibilities": [{"code": client.responsibilities.value}],
-            "address": {
-                "address": client.address,
-                "city": {
-                    "country_code": str(client.city_detail.country_code),
-                    "state_code": str(client.city_detail.state_code),
-                    "city_code": str(client.city_detail.city_code),
-                },
-                "postal_code": "",
-            },
-            "phones": [
-                {
-                    "indicative": "",
-                    "number": client.phone[0:10],
-                    "extension": "",
-                }
-            ],
-            "contacts": [
-                {
-                    "first_name": name,
-                    "last_name": last_name,
-                    "email": client.email,
-                    "phone": {
-                        "indicative": "",
-                        "number": client.phone[0:10],
-                        "extension": "",
-                    },
-                }
-            ],
-            "comments": "Created from Pirpos2Siigo software",
-            # "related_users": {"seller_id": 629, "collector_id": 629},
-        }
-
+        # Debug info
+        self.__logger.debug(
+            f"Updating client {client.document_number} with Siigo ID: {user_siigo_id}"
+        )
+        self.__logger.debug(f"URL: {client_url}")
+        self._rate_limiter.wait_if_needed()
         response = requests.request(
             "PUT",
             client_url,
             headers=headers,
-            data=str(payload),
+            data=json.dumps(payload, ensure_ascii=False),
+            timeout=self.__timeout,
         )
         if not response.ok:
-            raise ErrorUpdatingSiigoClient(f"Can't update Siigo clients\n {response.text}")
+            raise UpdateError(f"Can't update Siigo client\n {response.text}")
 
     def get_products(self) -> None:
         """Get created products on Siigo.

@@ -7,6 +7,7 @@ from logging import Logger
 import logging
 import time
 from datetime import datetime, timedelta
+from collections import defaultdict
 import requests  # type: ignore
 from invoice_synchronizer.domain import (
     User,
@@ -88,6 +89,7 @@ class PirposConnector(PlatformConnector):
             batch used to download clients, by default 200
         """
         page = 0
+        clients_by_id = defaultdict(list)
         clients: List[User] = []
         headers = {
             "Content-Type": "application/json",
@@ -113,6 +115,8 @@ class PirposConnector(PlatformConnector):
             for client_data in data:
                 name = client_data["name"]
                 # pirpos_id=client_data.get("_id"),
+                phone = client_data.get("phone")
+                phone = phone.replace(" ", "")[0:10] if phone else phone
                 client = User.create_user_with_defaults(
                     default_user=self.__default_user,
                     name=name,
@@ -127,11 +131,20 @@ class PirposConnector(PlatformConnector):
                     state_code=client_data.get("cityDetail", {}).get("stateCode"),
                     responsibilities=client_data.get("responsibilities"),
                     email=client_data.get("email"),
-                    phone=client_data.get("phone"),
+                    phone=phone,
                     address=client_data.get("address"),
                 )
-                clients.append(client)
+                modified_on = datetime.fromisoformat(
+                    client_data["modifiedOn"].replace("Z", "+00:00")
+                )
+                clients_by_id[client.document_number].append((client, modified_on))
             page += 1
+
+        for client_list in clients_by_id.values():
+            # Sort clients by modified_on date in descending order and take the most recent one
+            most_recent_client = max(client_list, key=lambda x: x[1])[0]
+            clients.append(most_recent_client)
+
         return clients
 
     def create_client(self, client: User) -> None:

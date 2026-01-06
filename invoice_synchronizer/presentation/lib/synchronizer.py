@@ -1,5 +1,6 @@
 """Exposed library"""
 
+import sys
 import logging
 from invoice_synchronizer.infrastructure import SystemConfig, PirposConnector, SiigoConnector
 from invoice_synchronizer.application import Updater
@@ -13,7 +14,26 @@ class InvoiceSynchronizer:
         system_config = SystemConfig()
         pirpos_config = system_config.define_pirpos_config()
         siigo_config = system_config.define_siigo_config()
-        logger = logging.getLogger()
+        logger = logging.getLogger("invoice_synchronizer_logger")
+        logger.setLevel(level=logging.INFO)
+        logs_stream_formatter = logging.Formatter(
+            fmt=(
+                "%(levelname)-8s %(asctime)s \t %(filename)s @function"
+                "%(funcName)s line %(lineno)s \n%(message)s\n"
+            ),
+            datefmt="%H:%M:%S",
+        )
+        console_handler = logging.StreamHandler(stream=sys.stdout)
+        console_handler.setFormatter(logs_stream_formatter)
+        console_handler.setLevel(level=logging.DEBUG)
+
+        file_handler = logging.FileHandler(filename="../logs.txt")
+        file_handler.setFormatter(logs_stream_formatter)
+        file_handler.setLevel(level=logging.DEBUG)
+
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+
         self.pirpos_connector = PirposConnector(pirpos_config, logger=logger)
         self.siigo_connector = SiigoConnector(siigo_config, logger=logger)
 
@@ -21,6 +41,7 @@ class InvoiceSynchronizer:
             source_client=self.pirpos_connector,
             target_client=self.siigo_connector,
             default_client=system_config.default_user,
+            logger=logger,
         )
 
 

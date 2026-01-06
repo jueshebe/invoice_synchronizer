@@ -22,7 +22,7 @@ class Updater:
         source_client: PlatformConnector,
         target_client: PlatformConnector,
         default_client: User,
-        logger: Logger = logging.getLogger(),
+        logger: Logger,
     ):
         """Load Pirpos and Siigo clients."""
         self.source_client: PlatformConnector = source_client

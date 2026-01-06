@@ -1,8 +1,9 @@
 """Model for clients."""
 
 from enum import Enum
+import re
 from typing import Optional, Union
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from invoice_synchronizer.domain.models.utils import normalize
 
 
@@ -63,19 +64,25 @@ class User(BaseModel):
     phone: str
     address: str
 
-    @validator("name")
+    @field_validator("name")
     @classmethod
     def clean_name(cls, name: str) -> str:
         """Remove upercase and accents."""
         return normalize(name)
 
-    @validator("address")
+    @field_validator("last_name")
+    @classmethod
+    def clean_last_name(cls, last_name: str) -> str:
+        """Remove upercase and accents."""
+        return normalize(last_name)
+
+    @field_validator("address")
     @classmethod
     def clean_address(cls, address: str) -> str:
         """Remove upercase and accents."""
         return normalize(address)
 
-    @validator("phone")
+    @field_validator("phone")
     @classmethod
     def clean_phone(cls, phone: str) -> str:
         """Remove spaces on phone parameter.
@@ -172,6 +179,9 @@ class User(BaseModel):
             responsibilities_map = default_user.responsibilities
 
         document_number = cls.clean_document(document) if document else default_user.document_number
+        address = address.strip().lower() if address else ""
+        # address = re.sub(r"[^a-zA-Z0-9_]", "", address)
+
         return User(
             name=name,
             last_name=last_name,
@@ -179,8 +189,10 @@ class User(BaseModel):
             document_number=document_number,
             check_digit=cls.get_check_digit(document_number),
             city_detail=CityDetail(
-                city_name=city_name if city_name else default_user.city_detail.city_name,
-                city_state=city_state if city_state else default_user.city_detail.city_state,
+                city_name=city_name.strip() if city_name else default_user.city_detail.city_name,
+                city_state=(
+                    city_state.strip() if city_state else default_user.city_detail.city_state
+                ),
                 city_code=city_code if city_code else default_user.city_detail.city_code,
                 country_code=(
                     country_code if country_code else default_user.city_detail.country_code
@@ -188,18 +200,43 @@ class User(BaseModel):
                 state_code=state_code if state_code else default_user.city_detail.state_code,
             ),
             responsibilities=responsibilities_map,
-            email=email if email else default_user.email,
-            phone=phone if phone else default_user.phone,
-            address=address if address else default_user.address,
+            email=email.strip().lower() if email else default_user.email,
+            phone=phone.strip().lower() if phone else default_user.phone,
+            address=address,
         )
+
+    @classmethod
+    def name_to_compare(cls, name: str, last_name: Optional[str]) -> str:
+        """Generate a comparable name string."""
+        full_name = name.split(" ") + (last_name.split(" ") if last_name else [""])
+        name_part, last_name_part = [full_name[0].strip(), " ".join(full_name[1:])]
+        last_name_part = last_name_part if len(last_name_part) > 0 else "."
+        last_name_part = last_name_part[0:50].strip()
+
+        comparable_name = f"{name_part} {last_name_part}".strip().replace(" ", "")
+        return comparable_name
 
     def __eq__(self, other: object) -> bool:
         """Compare two users based on their document number."""
         if not isinstance(other, User):
             return NotImplemented
-        self_dict = self.dict()
-        other_dict = other.dict()
+        self_dict = self.model_dump()
+        other_dict = other.model_dump()
         for key in self_dict.keys():
+            if key in ("name", "last_name", "address"):
+                continue
             if self_dict[key] != other_dict[key]:
                 return False
+
+        full_name = self.name_to_compare(self.name, self.last_name)
+        other_full_name = self.name_to_compare(other.name, other.last_name)
+
+        if full_name != other_full_name:
+            return False
+
+        address_self = re.sub(r"[^a-zA-Z0-9 ]", "", self.address).replace(" ", "")
+        address_other = re.sub(r"[^a-zA-Z0-9 ]", "", other.address).replace(" ", "")
+        if address_self != address_other:
+            return False
+
         return True
