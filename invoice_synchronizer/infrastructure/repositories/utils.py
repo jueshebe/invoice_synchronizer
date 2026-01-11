@@ -14,15 +14,15 @@ from invoice_synchronizer.domain.models import (
     Responsibilities,
     DocumentType,
 )
+from invoice_synchronizer.infrastructure.config import SystemParameters
 
 
 def create_product(
+    system_parameters: SystemParameters,
     product_id: str,
     name: str,
     base: float,
     final_price: float,
-    taxes: List[TaxType],
-    taxes_values: List[Dict[TaxType, float]],
 ) -> List[Product]:
     """From pirpos data create product."""
     products: List[Product] = []
@@ -40,6 +40,16 @@ def create_product(
 
 def create_invoice():
     pass
+
+
+def find_mapping(
+    mappings: List[Dict[str, Any]], client_key: str, client_value: str
+) -> Dict[str, Any]:
+    """Find mapping value in system configuration."""
+    for mapping in mappings:
+        if str(mapping[client_key]) == str(client_value):
+            return mapping
+    raise ValueError(f"Mapping for {client_key}: {client_value} not found. Check system mappings.")
 
 
 # def create_invoice(

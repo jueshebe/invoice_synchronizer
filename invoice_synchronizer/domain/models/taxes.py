@@ -1,10 +1,13 @@
 """Model for products."""
+
 from pydantic import BaseModel
 
 
 class TaxType(BaseModel):
-    """Stock information."""
-    
+    """Tax information."""
+
+    model_config = {"frozen": True}
+
     tax_name: str
     tax_percentage: float
 

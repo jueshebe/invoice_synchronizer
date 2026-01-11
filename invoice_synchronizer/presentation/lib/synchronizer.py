@@ -48,4 +48,5 @@ class InvoiceSynchronizer:
 if __name__ == "__main__":
     synchronizer = InvoiceSynchronizer()
 
-    synchronizer.updater.update_clients()
+    # synchronizer.updater.update_clients()
+    synchronizer.updater.update_products()

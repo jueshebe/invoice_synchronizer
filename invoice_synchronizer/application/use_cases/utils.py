@@ -74,9 +74,7 @@ def get_missing_outdated_products(
             """Get outdated_products."""
             return product.product_id == ref_product.product_id
 
-        unchecked_product: Product = list(filter(filter_outdated_product, unchecked_products))[
-            0
-        ]  # TODO: is supposed Siigo does not repear docuemnt clients
+        unchecked_product: Product = list(filter(filter_outdated_product, unchecked_products))[0]
 
         if ref_product != unchecked_product:
             outdated_products.append(ref_product)

@@ -1,6 +1,6 @@
 """Siigo client."""
 
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Any
 import os
 import re
 import time
@@ -26,7 +26,11 @@ from invoice_synchronizer.infrastructure.repositories.utils import (
     create_invoice,
 )
 from invoice_synchronizer.infrastructure.config import SiigoConfig
-from invoice_synchronizer.infrastructure.repositories.siigo.utils import user_to_siigo_payload
+from invoice_synchronizer.infrastructure.repositories.siigo.utils import (
+    user_to_siigo_payload,
+    define_siigo_product,
+    product_to_siigo_payload,
+)
 from invoice_synchronizer.infrastructure.repositories.rate_limiter.rate_limiter import RateLimiter
 
 
@@ -41,14 +45,17 @@ class SiigoConnector(PlatformConnector):
         self.__siigo_access_key = siigo_config.siigo_access_key
         self.__configuration = siigo_config.system_mapping
         self.__products: List[Product]
-        self.__documents_to_id: Dict[int, str] = {}
-        self.__documents_to_raw_user: Dict[int, Any] = {}
         self.__page_size = 500
         self.__batch_products: int = 100
         self.__timeout = siigo_config.timeout
         self.default_client = siigo_config.default_user
         self._rate_limiter = RateLimiter(max_requests_per_minute=90, logger=logger)
         self.__siigo_access_token = self.__get_siigo_access_token()
+
+        # ids mapping to operate with API
+        self.__documents_to_id: Dict[int, str] = {}
+        self.__documents_to_raw_user: Dict[int, Any] = {}
+        self.__productid_to_id: Dict[str, str] = {}
         logger.info("Siigo connector initialized.")
 
     def __get_siigo_access_token(self) -> str:
@@ -65,12 +72,26 @@ class SiigoConnector(PlatformConnector):
             access_token
 
         """
+        path_folder = os.path.join(os.path.expanduser("~"), ".config/pirpos2siigo")
+        file_path = os.path.join(path_folder, "token.json")
+        os.makedirs(path_folder, exist_ok=True)
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as file:
+                dict_data = json.loads(file.read())
+            access_token = dict_data["token"]
+            time = datetime.strptime(dict_data["time"], "%Y-%m-%d-%H-%M")
+            if (datetime.now() - time).total_seconds() / 3600 < 10:
+                return access_token
+
         url = "https://api.siigo.com/auth"
         values = {
             "username": self.__siigo_username,
             "access_key": self.__siigo_access_key,
         }
-        headers = {"Content-Type": "application/json; charset=UTF-8"}
+        headers = {
+            "Content-Type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
+        }
         response = requests.post(
             url, data=json.dumps(values), headers=headers, timeout=self.__timeout
         )
@@ -84,6 +105,15 @@ class SiigoConnector(PlatformConnector):
             assert isinstance(access_token, str)
         else:
             raise AuthenticationError("access_token key is not present in the respose")
+
+        with open(file_path, "w", encoding="utf-8") as file:
+            json_data = json.dumps(
+                {
+                    "token": access_token,
+                    "time": datetime.now().strftime("%Y-%m-%d-%H-%M"),
+                }
+            )
+            file.write(json_data)
 
         return access_token
 
@@ -235,7 +265,7 @@ class SiigoConnector(PlatformConnector):
         if not response.ok:
             raise UpdateError(f"Can't update Siigo client\n {response.text}")
 
-    def get_products(self) -> None:
+    def get_products(self) -> List[Product]:
         """Get created products on Siigo.
 
         Returns
@@ -243,76 +273,50 @@ class SiigoConnector(PlatformConnector):
         List[Product]
             Siigo products
         """
-        url = "https://services.siigo.com/ACReportApi/api/v1/Report/post"
+        url = "https://api.siigo.com/v1/products?page_size=100"
         headers = {
-            "authority": "services.siigo.com",
-            "accept": "application/json, text/plain, */*",
-            "authorization": self.__siigo_access_token,
             "content-type": "application/json; charset=UTF-8",
+            "Authorization": self.__siigo_access_token,
+            "Partner-Id": "DesarrolloPropio",
         }
 
-        page = 0
         products: List[Product] = []
 
         while True:
-            payload = json.dumps(
-                {
-                    "Id": 5054,
-                    "Skip": self.__batch_products * page,
-                    "Take": self.__batch_products,
-                    "Sort": " ",
-                    "FilterCriterias": (
-                        '[{"Field":"_vGroup","FilterType":2,"OperatorType":0,"Value":[-1]'
-                        ',"ValueUI":"","Source":"[{\\"id\\":1590,\\"name\\":\\"Domicilios\\"}'
-                        ',{\\"id\\":1487,\\"name\\":\\"Insumos\\"},{\\"id\\":673,\\"name\\":'
-                        '\\"Productos\\"},{\\"id\\":674,\\"name\\":\\"Servicios\\"}]"},'
-                        '{"Field":"_vType","FilterType":7,"OperatorType":0,"Value":[-1],'
-                        '"ValueUI":"","Source":"TypeProductEnum"},{"Field":"_vProduct",'
-                        '"FilterType":6,"OperatorType":0,"Value":[],"ValueUI":"","Source":"40"}'
-                        ',{"Field":"_vBalance","FilterType":7,"OperatorType":0,"Value":["3"],'
-                        '"ValueUI":"Todos","Source":"ProductBalancesEnum"},{"Field":"_vState",'
-                        '"FilterType":7,"OperatorType":0,"Value":["1"],"ValueUI":"Activo",'
-                        '"Source":"ProductStateEnum"},{"Field":"Currency","FilterType":65,'
-                        '"OperatorType":0,"Value":["ALL"],"ValueUI":"Moneda Local","Source":null}]'
-                    ),
-                    "Params": '{"TabID":"912","pTabID":"912"}',
-                    "GetTotalCount": False,
-                    "GridOrderCriteria": None,
-                }
-            )
-            response = requests.request("POST", url, headers=headers, data=payload)
+            self._rate_limiter.wait_if_needed()
+            response = requests.request("GET", url, headers=headers)
             if not response.ok:
-                raise ErrorLoadingSiigoProducts("Can't download Siigo Products")
-            data = response.json()["data"]["Value"]["Table"]
+                raise FetchDataError("Can't download Siigo Products")
+            data = response.json()
             if len(data) == 0:
                 break
 
-            for product_info in data:
-                taxes: List[TaxInfo] = []
-                for tax_info in self.__configuration.taxes_map:
-                    if tax_info.siigo_name in [
-                        product_info["tax1name"],
-                        product_info["tax2name"],
-                        product_info["tax3name"],
-                    ]:
-                        taxes.append(tax_info)
+            for product_info in data["results"]:
+                if product_info["type"] != "Product":
+                    continue
 
-                products.append(
-                    Product(
-                        siigo_id=product_info["ProductGUID"],
-                        product_id=product_info["Code"],
-                        name=product_info["Description"],
-                        price=(
-                            product_info["Precio de venta 1"]
-                            if product_info["Precio de venta 1"]
-                            else 0
-                        ),
-                        taxes=taxes,
-                    )
+                prices = product_info.get("prices", None)
+                if prices is None or len(prices) == 0:
+                    price = 0.0
+                else:
+                    price = float(prices[0]["price_list"][0]["value"])
+
+                product = define_siigo_product(
+                    self.__configuration,
+                    product_info["code"],
+                    product_info["name"],
+                    price,
+                    product_info.get("taxes") or [],
                 )
-            page += 1
+                products.append(product)
+                self.__productid_to_id[product.product_id] = product_info["id"]
 
-        self.__products = products
+            if data["_links"].get("next") is None:
+                break
+            else:
+                url = data["_links"]["next"]["href"]
+
+        return products
 
     def create_product(self, product: Product) -> None:
         """Create product.
@@ -326,52 +330,25 @@ class SiigoConnector(PlatformConnector):
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
         }
-        if len(product.taxes) > 0:
-            tax = [{"id": product.taxes[0].siigo_id}]
-        else:
-            tax = []
 
-        if product.price > 0:
-            prices = [
-                {
-                    "currency_code": "COP",
-                    "price_list": [
-                        {
-                            "position": 1,
-                            "value": product.price if product.price > 0 else 1,
-                        }
-                    ],
-                }
-            ]
-        else:
-            prices = []
-
-        payload = {
-            "code": product.product_id,
-            "name": product.name,
-            "account_group": 673,
-            "type": "Product",
-            "stock_control": "false",
-            "active": "true",
-            "tax_classification": "Taxed",
-            "tax_included": "true",
-            "tax_consumption_value": 0,
-            "taxes": tax,
-            "prices": prices,
-            "unit": "94",
-            "unit_label": "unidad",
-            "reference": "REF1",
-            "description": ".",
-        }
+        payload = product_to_siigo_payload(
+            self.__configuration,
+            product,
+        )
+        self._rate_limiter.wait_if_needed()
         response = requests.request(
             "POST",
             url,
             headers=headers,
-            data=str(payload),
+            data=json.dumps(payload, ensure_ascii=False),
+            timeout=self.__timeout,
         )
         if not response.ok:
-            raise ErrorCreatingSiigoProduct(f"Can't create product\n {response.text}")
+            raise UploadError(f"Can't create product\n {response.text}")
+
+    # def get_taxes_mapping(self) -> Dict[str, str]:
 
     def update_product(self, product: Product) -> None:
         """Update product.
@@ -381,56 +358,33 @@ class SiigoConnector(PlatformConnector):
         products : Product
             product to be updated
         """
-        url = f"https://api.siigo.com/v1/products/{product.siigo_id}"
+        product_id = self.__productid_to_id.get(product.product_id)
+        if product_id is None:
+            self.get_products()
+            product_id = self.__productid_to_id.get(product.product_id)
+            if product_id is None:
+                raise UpdateError(f"Siigo ID for product {product.product_id} not found.")
+
+        url = f"https://api.siigo.com/v1/products/{product_id}"
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
         }
-        if len(product.taxes) > 0:
-            tax = [{"id": product.taxes[0].siigo_id}]
-        else:
-            tax = []
-
-        if product.price > 0:
-            prices = [
-                {
-                    "currency_code": "COP",
-                    "price_list": [
-                        {
-                            "position": 1,
-                            "value": product.price if product.price > 0 else 1,
-                        }
-                    ],
-                }
-            ]
-        else:
-            prices = []
-
-        payload = {
-            "code": product.product_id,
-            "name": product.name,
-            "account_group": 673,
-            "type": "Product",
-            "stock_control": "false",
-            "active": "true",
-            "tax_classification": "Taxed",
-            "tax_included": "true",
-            "tax_consumption_value": 0,
-            "taxes": tax,
-            "prices": prices,
-            "unit": "94",
-            "unit_label": "unidad",
-            "reference": "REF1",
-            "description": ".",
-        }
+        payload = product_to_siigo_payload(
+            self.__configuration,
+            product,
+        )
+        self._rate_limiter.wait_if_needed()
         response = requests.request(
             "PUT",
             url,
             headers=headers,
             data=str(payload),
+            timeout=self.__timeout,
         )
         if not response.ok:
-            raise ErrorUpdatingSiigoProduct(f"Can't update product\n {response.text}")
+            raise UpdateError(f"Can't update product\n {response.text}")
 
     def get_invoices(
         self, init_day: datetime, end_day: datetime, invoice_status: List[InvoiceStatus]

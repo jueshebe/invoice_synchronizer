@@ -17,8 +17,8 @@ from invoice_synchronizer.domain import (
     AuthenticationError,
     FetchDataError,
 )
-from invoice_synchronizer.infrastructure.repositories.utils import (
-    create_product,
+from invoice_synchronizer.infrastructure.repositories.pirpos.utils import (
+    define_pirpos_product_subproducts,
     create_invoice,
 )
 from invoice_synchronizer.infrastructure.config import PirposConfig
@@ -192,7 +192,7 @@ class PirposConnector(PlatformConnector):
                 "GET", url, headers=headers, timeout=self.__requests_timeout
             )
             if not response.ok:
-                raise ErrorLoadingPirposProducts("Can't download Pirpos Products")
+                raise FetchDataError("Can't download Pirpos Products")
             data = response.json()["data"]  # TODO: check incoming data with BaseModel class
             if len(data) == 0:
                 break
@@ -202,7 +202,7 @@ class PirposConnector(PlatformConnector):
                 location_stock = product_info["locationsStock"][0]
                 sub_products = product_info["subProducts"]
                 products.extend(
-                    create_product(
+                    define_pirpos_product_subproducts(
                         self.__configuration,
                         product_id,
                         name,

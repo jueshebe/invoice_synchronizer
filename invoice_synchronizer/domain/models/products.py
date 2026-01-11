@@ -14,7 +14,7 @@ class Product(BaseModel):
     base: float
     final_price: float
     taxes: List[TaxType]
-    taxes_values: List[Dict[TaxType, float]]
+    taxes_values: Dict[TaxType, float]
 
     @field_validator("name")
     @classmethod
