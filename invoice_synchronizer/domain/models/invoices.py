@@ -9,20 +9,10 @@ from invoice_synchronizer.domain.models.products import Product
 from invoice_synchronizer.domain.models.taxes import Retention, TaxType
 
 
-class PaymentType(Enum):
-    """Type of payments."""
-
-    CASH = "CASH"
-    DEBIT_CARD = "DEBIT_CARD"
-    CREDIT_CARD = "CREDIT_CARD"
-    BANK_TRANSFER = "BANK_TRANSFER"
-    RAPPI = "RAPPI"
-
-
 class Payment(BaseModel):
     """Payment model."""
 
-    payment_type: PaymentType
+    payment_type: str
     value: float
 
 
@@ -41,20 +31,27 @@ class InvoiceStatus(Enum):
     ANULATED = "ANULATED"
 
 
+class OrderItems(BaseModel):
+    """Order items model."""
+
+    product: Product
+    quantity: int
+
+
 class Invoice(BaseModel):
     """Invoice model."""
 
-    business: User
-    cachier: User
-    sell_point: str
-    seller: User
+    # business: User
+    # cachier: User
+    # sell_point: str
+    # seller: User
     client: User
     created_on: datetime
     anulated_on: Optional[datetime] = None
     invoice_id: InvoiceId
     payments: List[Payment]
-    products: List[Product]
+    order_items: List[OrderItems]
     total: float
-    taxes_values: List[Dict[TaxType, float]]
-    retention_values: List[Dict[Retention, float]]
+    taxes_values: Dict[TaxType, float]
+    # retention_values: List[Dict[Retention, float]]
     status: InvoiceStatus = InvoiceStatus.PAID

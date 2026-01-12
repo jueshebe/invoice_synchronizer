@@ -18,6 +18,7 @@ class SystemParameters(BaseModel):
     payments: list[Dict[str, MAPPING_VALUES]]
     taxes: list[Dict[str, MAPPING_VALUES]]
     prefixes: list[Dict[str, MAPPING_VALUES]]
+    invoice_status: list[Dict[str, MAPPING_VALUES]]
     retentions: list[Dict[str, MAPPING_VALUES]]
 
     @classmethod

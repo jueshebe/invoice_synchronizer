@@ -13,13 +13,14 @@ from invoice_synchronizer.domain import (
     User,
     Product,
     Invoice,
+    InvoiceStatus,
     PlatformConnector,
     AuthenticationError,
     FetchDataError,
 )
 from invoice_synchronizer.infrastructure.repositories.pirpos.utils import (
     define_pirpos_product_subproducts,
-    create_invoice,
+    define_pirpos_invoices,
 )
 from invoice_synchronizer.infrastructure.config import PirposConfig
 
@@ -117,6 +118,10 @@ class PirposConnector(PlatformConnector):
                 # pirpos_id=client_data.get("_id"),
                 phone = client_data.get("phone")
                 phone = phone.replace(" ", "")[0:10] if phone else phone
+
+                if not client_data.get("document"):
+                    continue
+
                 client = User.create_user_with_defaults(
                     default_user=self.__default_user,
                     name=name,
@@ -144,7 +149,7 @@ class PirposConnector(PlatformConnector):
             # Sort clients by modified_on date in descending order and take the most recent one
             most_recent_client = max(client_list, key=lambda x: x[1])[0]
             clients.append(most_recent_client)
-
+        clients.append(self.__default_user)
         return clients
 
     def create_client(self, client: User) -> None:
@@ -234,7 +239,9 @@ class PirposConnector(PlatformConnector):
         """
         raise NotImplementedError("Method not implemented yet.")
 
-    def get_invoices(self, init_day: datetime, end_day: datetime) -> List[Invoice]:
+    def __get_invoices_by_status(
+        self, init_day: datetime, end_day: datetime, status: InvoiceStatus, clients: List[User]
+    ) -> List[Invoice]:
         """Get invoices from pirpos.
 
         Parameters
@@ -252,7 +259,7 @@ class PirposConnector(PlatformConnector):
 
         end_day += timedelta(days=1)
         if init_day > end_day:
-            raise ErrorLoadingPirposInvoices("end_day must be greater than init_day")
+            raise FetchDataError("end_day must be greater than init_day")
         days = 0
         invoices_per_client: List[Invoice] = []
         headers = {
@@ -260,6 +267,8 @@ class PirposConnector(PlatformConnector):
             "Referer": "https://app.pirpos.com/",
             "Authorization": f"Bearer {self.__pirpos_access_token}",
         }
+
+        # products = self.get_products()
 
         while True:
             time1 = init_day + timedelta(days=days)
@@ -271,92 +280,57 @@ class PirposConnector(PlatformConnector):
             days += self.__days_step
             date1_str = datetime.strftime(time1, "%Y-%m-%dT05:00:00.000Z")
             date2_str = datetime.strftime(time2, "%Y-%m-%dT05:00:00.000Z")
+
+            status_query_param = ""
+            if status == InvoiceStatus.ANULATED:
+                status_query_param = "Anulada"
+            elif status == InvoiceStatus.PAID:
+                status_query_param = "Pagada"
+            else:
+                raise FetchDataError(f"Status {status} not recognized")
+
             url = (
                 f"https://api.pirpos.com/reports/reportSalesInvoices?"
-                f"status=Pagada&dateInit={date1_str}&dateEnd={date2_str}&"
+                f"status={status_query_param}&dateInit={date1_str}&dateEnd={date2_str}&"
             )
+
             response = requests.request(
                 "GET", url, headers=headers, timeout=self.__requests_timeout
             )
             if not response.ok:
-                raise ErrorLoadingPirposInvoices("Can't download invoices per client from pirpos")
+                raise FetchDataError("Can't download invoices per client from pirpos")
             data = response.json()  # TODO: validate incoming data with BaseModel
 
-            for invoice_info in data:
-                try:
-                    # select client
-                    client_document_str = str(invoice_info["client"].get("document", "0"))
-                    client_document = (
-                        int(client_document_str) if client_document_str.isnumeric() else 0
-                    )
-
-                    def filter_client(client: Client, document: int = client_document) -> bool:
-                        return client.document == document
-
-                    filtered_clients: List[Client] = list(filter(filter_client, self.__clients))
-
-                    if len(filtered_clients) > 0:
-                        client = filtered_clients[0]
-                    else:
-                        client = self.__configuration.default_client
-
-                    # select products
-                    invoice_products: List[Tuple[Product, float, int, str]] = []
-                    for product_info in invoice_info["products"]:
-                        product_id = product_info["idInternal"]
-
-                        def filter_product(product: Product, product_id: str = product_id) -> bool:
-                            return product.product_id == product_id
-
-                        filtered_products: List[Product] = list(
-                            filter(filter_product, self.__products)
-                        )
-                        if len(filtered_products) > 0:
-                            product = filtered_products[0]
-                        else:
-                            product = self.__products[0]
-                        price = product_info["price"]
-                        quantity = product_info["quantity"]
-                        tax_name = invoice_info["taxes"][0]["name"]
-                        invoice_products.append((product, price, quantity, tax_name))
-
-                    invoice_obj = create_invoice(
-                        configuration=self.__configuration,
-                        cachier_name=invoice_info["cashier"]["name"],
-                        cachier_id=invoice_info["cashier"]["idInternal"],
-                        seller_name=invoice_info["seller"]["name"],
-                        seller_id=invoice_info["seller"]["idInternal"],
-                        client=client,
-                        created_on=datetime.strptime(
-                            invoice_info["createdOn"], "%Y-%m-%dT%H:%M:%S.%f%z"
-                        ),
-                        invoice_prefix=invoice_info["invoicePrefix"],
-                        invoice_number=invoice_info["seq"],
-                        payments=[
-                            (payment["paymentMethod"], payment["value"])
-                            for payment in invoice_info["paid"]["paymentMethodValue"]
-                        ],
-                        invoice_products=invoice_products,
-                        total=invoice_info["total"],
-                    )
-                    invoices_per_client.append(invoice_obj)
-
-                except Exception as error:
-                    print(
-                        f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}",
-                        f"raise error: {error}",
-                    )
-                    raise ErrorLoadingPirposInvoices(
-                        (
-                            f"Factura {invoice_info['invoicePrefix']}{invoice_info['seq']}"
-                            f"raise error: {error}"
-                        )
-                    ) from error
-
+            invoices_per_client.extend(define_pirpos_invoices(data, self.__configuration, clients))
             if time2 >= end_day:
                 break
 
         return invoices_per_client
+
+    def get_invoices(self, init_day: datetime, end_day: datetime) -> List[Invoice]:
+        """Get invoices from pirpos.
+
+        Parameters
+        ----------
+        init_day : datetime
+            initial time to download invoices. year-month-day
+        end_day : datetime
+            end time to download invoices year-month-day
+
+        Returns
+        -------
+        List[Invoice]
+            Pirpos invoices in a range of time
+        """
+        clients = self.get_clients()
+        invoices_anulated = self.__get_invoices_by_status(
+            init_day, end_day, InvoiceStatus.ANULATED, clients
+        )
+        invoices_paid = self.__get_invoices_by_status(
+            init_day, end_day, InvoiceStatus.PAID, clients
+        )
+        all_invoices = invoices_paid + invoices_anulated
+        return all_invoices
 
     def create_invoice(self, invoice: Invoice) -> None:
         """Create an invoice on pirpos.

@@ -1,8 +1,8 @@
 from invoice_synchronizer.domain.models import (
-    PaymentType,
     Payment,
     InvoiceId,
     InvoiceStatus,
+    OrderItems,
     Invoice,
     Product,
     TaxType,
@@ -21,13 +21,14 @@ from invoice_synchronizer.domain.errors.errors import (
     FetchDataError,
     UploadError,
     UpdateError,
+    ParseDataError,
 )
 
 __all__ = [
-    "PaymentType",
     "Payment",
     "InvoiceId",
     "InvoiceStatus",
+    "OrderItems",
     "Invoice",
     "Product",
     "TaxType",
@@ -42,4 +43,5 @@ __all__ = [
     "FetchDataError",
     "UploadError",
     "UpdateError",
+    "ParseDataError",
 ]

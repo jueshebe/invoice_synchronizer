@@ -24,7 +24,7 @@ class Updater:
         default_client: User,
         logger: Logger,
     ):
-        """Load Pirpos and Siigo clients."""
+        """Load data fomr source and update on target."""
         self.source_client: PlatformConnector = source_client
         self.target_client: PlatformConnector = target_client
         self.default_client: User = default_client
@@ -32,7 +32,7 @@ class Updater:
         logger.info("Updated ready.")
 
     def update_clients(self) -> None:
-        """Update and create client on siigo from pirpos data."""
+        """Update and create clients."""
         self.logger.info("Updating clients")
         source_clients = self.source_client.get_clients()
         target_clients = self.target_client.get_clients()
@@ -81,7 +81,7 @@ class Updater:
                 save_error(error_data, "clients_error.json")
 
     def update_products(self) -> None:
-        """Update and create products on siigo from pirpos data."""
+        """Update and create products."""
         self.logger.info("Updating products")
         source_products = self.source_client.get_products()
         target_products = self.target_client.get_products()
@@ -129,12 +129,8 @@ class Updater:
     def update_invoices(self, init_date: datetime, end_day: datetime) -> None:
         """Update and create invoices on target from source data."""
         self.logger.info("Updating invoices")
-        ref_invoices = self.source_client.get_invoices(
-            init_date, end_day, invoice_status=[InvoiceStatus.PAID]
-        )
-        unchecked_invoices = self.target_client.get_invoices(
-            init_date, end_day, invoice_status=[InvoiceStatus.PAID]
-        )
+        ref_invoices = self.source_client.get_invoices(init_date, end_day)
+        unchecked_invoices = self.target_client.get_invoices(init_date, end_day)
 
         # get missing and ourdated clients
         (

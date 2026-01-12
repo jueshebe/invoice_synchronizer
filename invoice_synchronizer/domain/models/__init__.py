@@ -1,10 +1,10 @@
 """Application Models."""
 
 from invoice_synchronizer.domain.models.invoices import (
-    PaymentType,
     Payment,
     InvoiceId,
     InvoiceStatus,
+    OrderItems,
     Invoice,
 )
 from invoice_synchronizer.domain.models.products import Product
@@ -13,10 +13,10 @@ from invoice_synchronizer.domain.models.user import CityDetail, Responsibilities
 
 
 __all__ = [
-    "PaymentType",
     "Payment",
     "InvoiceId",
     "InvoiceStatus",
+    "OrderItems",
     "Invoice",
     "Product",
     "TaxType",

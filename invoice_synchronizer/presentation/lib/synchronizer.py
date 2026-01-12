@@ -2,6 +2,7 @@
 
 import sys
 import logging
+from datetime import datetime
 from invoice_synchronizer.infrastructure import SystemConfig, PirposConnector, SiigoConnector
 from invoice_synchronizer.application import Updater
 
@@ -49,4 +50,6 @@ if __name__ == "__main__":
     synchronizer = InvoiceSynchronizer()
 
     # synchronizer.updater.update_clients()
-    synchronizer.updater.update_products()
+    init_date = datetime(2025, 12, 1)
+    end_date = datetime(2025, 12, 30)
+    synchronizer.updater.update_invoices(init_date, end_date)
