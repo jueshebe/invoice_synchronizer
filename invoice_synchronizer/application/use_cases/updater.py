@@ -4,8 +4,7 @@ from copy import copy
 from logging import Logger
 from datetime import datetime
 import json
-import logging
-from invoice_synchronizer.domain import PlatformConnector, User, InvoiceStatus
+from invoice_synchronizer.domain import PlatformConnector, User
 from invoice_synchronizer.application.use_cases.utils import (
     get_missing_outdated_clients,
     save_error,
@@ -183,80 +182,9 @@ class Updater:
                         invoice.invoice_id.number,
                         error,
                     )
-                    # self.logger.error(
-                    #     f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number}
-                    # check invoices_error.json"
-                    # )
-                    # error_data = {
-                    #     "type_op": "Creating",
-                    #     "invoice": json.loads(invoice.json()),
-                    #     "error": str(error),
-                    #     "error_date": str(datetime.now()),
-                    # }
-                    # save_error(error_data, "invoices_error.json")
+
             missing_invoices = copy(failed_invoices)
             failed_invoices = []
 
             if len(missing_invoices) == 0:
                 break
-
-    def update_anulated_invoices(self, init_date: datetime, end_day: datetime) -> None:
-        self.logger.info("Checking canceled invoices")
-        ref_invoices = self.source_client.get_invoices(
-            init_date, end_day, invoice_status=[InvoiceStatus.ANULATED]
-        )
-        unchecked_invoices = self.target_client.get_invoices(
-            init_date, end_day, invoice_status=[InvoiceStatus.ANULATED]
-        )
-
-        (
-            missing_invoices,
-            _,
-            _,
-        ) = get_missing_outdated_invoices(ref_invoices, unchecked_invoices)
-
-        for _ in range(100):
-            failed_invoices = []
-            for counter, invoice in enumerate(missing_invoices):
-                try:
-                    if not invoice.payments:
-                        self.logger.info(
-                            "Invoice without payment method %s%s",
-                            invoice.invoice_id.prefix,
-                            invoice.invoice_id.number,
-                        )
-                        continue
-                    self.target_client.create_invoice(invoice)
-                    self.target_client.credit_note(invoice)
-                    self.logger.info(
-                        "%s | %s/%s invoices created and anulated",
-                        invoice.invoice_id.number,
-                        counter + 1,
-                        len(missing_invoices),
-                    )
-                except Exception as error:
-                    failed_invoices.append(invoice)
-                    self.logger.warning(
-                        "Error with invoice %s%s\nerror: %s",
-                        invoice.invoice_id.prefix,
-                        invoice.invoice_id.number,
-                        error,
-                    )
-                    # self.logger.error(
-                    #     f"Error with invoice {invoice.invoice_prefix}{invoice.invoice_number}
-                    # check invoices_error.json"
-                    # )
-                    # error_data = {
-                    #     "type_op": "Creating",
-                    #     "invoice": json.loads(invoice.json()),
-                    #     "error": str(error),
-                    #     "error_date": str(datetime.now()),
-                    # }
-                    # save_error(error_data, "invoices_error.json")
-            missing_invoices = copy(failed_invoices)
-            failed_invoices = []
-
-            if len(missing_invoices) == 0:
-                break
-
-        self.logger.info("Anulating invoices")

@@ -155,7 +155,6 @@ class User(BaseModel):
         last_name: Optional[str] = None,
         document_type: Optional[int] = None,
         document: Optional[str] = None,
-        check_digit: Optional[int] = None,
         city_name: Optional[str] = None,
         city_state: Optional[str] = None,
         city_code: Optional[str] = None,

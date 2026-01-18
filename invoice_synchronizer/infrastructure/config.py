@@ -1,7 +1,7 @@
 """Infrastructure configuration module."""
 
 import os
-from typing import Dict, Union
+from typing import Dict, Union, List
 import json
 from pydantic import BaseModel
 from invoice_synchronizer.domain import User
@@ -48,6 +48,7 @@ class SiigoConfig(BaseModel):
     default_user: User
     timeout: int = 30
     system_mapping: SystemParameters
+    retentions: List[int] = []
 
 
 class SystemConfig:
@@ -85,11 +86,15 @@ class SystemConfig:
 
     def define_siigo_config(self) -> SiigoConfig:
         """Define system configuration."""
-
+        file = os.environ.get("SIIGO_CONFIG_PATH", "SIIGO_CONFIGURATION.json")
+        with open(file, "r", encoding="utf-8") as siigo_config_file:
+            json_data = json.load(siigo_config_file)
+            retentions = json_data.get("retentions", [])
         siigo_config = SiigoConfig(
             siigo_username=os.environ["SIIGO_USER_NAME"],
             siigo_access_key=os.environ["SIIGO_ACCESS_KEY"],
             default_user=self.default_user,
             system_mapping=self.system_config,
+            retentions=retentions,
         )
         return siigo_config

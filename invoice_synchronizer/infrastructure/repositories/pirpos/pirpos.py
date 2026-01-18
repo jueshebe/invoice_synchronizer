@@ -1,11 +1,9 @@
 """PirPos client."""
 
-from typing import List, Tuple
-import os
+from typing import List
 import json
 from logging import Logger
 import logging
-import time
 from datetime import datetime, timedelta
 from collections import defaultdict
 import requests  # type: ignore
@@ -109,7 +107,7 @@ class PirposConnector(PlatformConnector):
             if not response.ok:
                 raise FetchDataError(f"Can't download PirPos clients\n {response.text}")
 
-            data = response.json()["data"]  # TODO: check incoming data with BaseModel class
+            data = response.json()["data"]
             if len(data) == 0:
                 break
 
@@ -128,7 +126,6 @@ class PirposConnector(PlatformConnector):
                     last_name=client_data.get("lastName"),
                     document_type=client_data.get("idDocumentType"),
                     document=client_data.get("document"),
-                    check_digit=client_data.get("checkDigit"),
                     city_name=client_data.get("cityDetail", {}).get("cityName"),
                     city_state=client_data.get("cityDetail", {}).get("stateName"),
                     city_code=client_data.get("cityDetail", {}).get("cityCode"),
@@ -198,7 +195,7 @@ class PirposConnector(PlatformConnector):
             )
             if not response.ok:
                 raise FetchDataError("Can't download Pirpos Products")
-            data = response.json()["data"]  # TODO: check incoming data with BaseModel class
+            data = response.json()["data"]
             if len(data) == 0:
                 break
             for product_info in data:
@@ -299,7 +296,7 @@ class PirposConnector(PlatformConnector):
             )
             if not response.ok:
                 raise FetchDataError("Can't download invoices per client from pirpos")
-            data = response.json()  # TODO: validate incoming data with BaseModel
+            data = response.json()
 
             invoices_per_client.extend(define_pirpos_invoices(data, self.__configuration, clients))
             if time2 >= end_day:
@@ -361,20 +358,3 @@ class PirposConnector(PlatformConnector):
             invoice to anulate
         """
         raise NotImplementedError("Method not implemented yet.")
-
-
-if __name__ == "__main__":
-    user_name = os.getenv("PIRPOS_USER_NAME")
-    user_password = os.getenv("PIRPOS_PASSWORD")
-    PATH = "/Users/julianestehe/Programs/asadero/pirpos2siigo/configuration.JSON"
-    assert isinstance(user_name, str)
-    assert isinstance(user_password, str)
-    time_1 = time.time()
-    connector = PirposConnector(user_name, user_password, PATH, logging.getLogger())
-    connector.get_pirpos_products()
-    print(time.time() - time_1)
-    date_1 = datetime(2022, 11, 2)
-    date_2 = datetime(2022, 11, 2)
-    time_1 = time.time()
-    loaded_invoices = connector.get_pirpos_invoices_per_client(date_1, date_2)
-    print(time.time() - time_1)

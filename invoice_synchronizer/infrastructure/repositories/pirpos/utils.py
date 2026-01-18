@@ -1,11 +1,9 @@
 """Utils used by clients."""
 
-from typing import Optional, Dict, Any, List, Tuple, Union
+from typing import Optional, Dict, Any, List
 from datetime import datetime
-import json
 from invoice_synchronizer.domain import (
     User,
-    CityDetail,
     Product,
     TaxType,
     OrderItems,
@@ -13,13 +11,13 @@ from invoice_synchronizer.domain import (
     Payment,
     InvoiceId,
     InvoiceStatus,
-    Product,
-    Responsibilities,
-    DocumentType,
     ParseDataError,
 )
 from invoice_synchronizer.infrastructure.config import SystemParameters
-from invoice_synchronizer.infrastructure.repositories.utils import find_mapping
+from invoice_synchronizer.infrastructure.repositories.utils import (
+    find_mapping,
+    filter_client_by_document,
+)
 
 
 def define_pirpos_product(
@@ -40,8 +38,11 @@ def define_pirpos_product(
             tax_name = tax["taxName"]
             tax_percentage = tax["taxValue"]
         else:
-            tax_name = tax["tax"]["name"]
-            tax_percentage = tax["tax"]["percentage"]
+            try:
+                tax_name = tax["tax"]["name"]
+                tax_percentage = tax["tax"]["percentage"]
+            except Exception:
+                continue
 
         mapping = find_mapping(system_parameters.taxes, "pirpos_id", tax_name)
         tax_name = mapping["system_id"]
@@ -101,18 +102,6 @@ def define_pirpos_product_subproducts(
                 )
             )
     return products
-
-
-def filter_client_by_document(clients: List[User], document: int) -> User:
-    """Filter client by document number."""
-
-    def filter_client(client: User, document: int = document) -> bool:
-        return client.document_number == document
-
-    filtered_clients: List[User] = list(filter(filter_client, clients))
-    if len(filtered_clients) == 0:
-        raise ValueError(f"Client with document {document} not found.")
-    return filtered_clients[0]
 
 
 def filter_product_by_id(products: List[Product], product_id: str) -> Product:

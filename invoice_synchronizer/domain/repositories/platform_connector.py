@@ -57,7 +57,3 @@ class PlatformConnector(ABC):
     @abstractmethod
     def update_invoice(self, invoice: Invoice) -> None:
         """Update invoice."""
-
-    @abstractmethod
-    def credit_note(self, invoice: Invoice) -> None:
-        """Create credit/anulate note for an invoice."""

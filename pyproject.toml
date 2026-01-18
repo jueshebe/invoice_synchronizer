@@ -4,7 +4,7 @@ version = "1.0.0"
 description = ""
 authors = ["JulianEstebanHerrera <julianesteban.herrera@mercadolibre.com.co>"]
 readme = "README.md"
-packages = [{include = "invoice_synchronizer"}]
+packages = [{ include = "invoice_synchronizer" }]
 
 [tool.poetry.dependencies]
 python = "^3.10,<3.11"

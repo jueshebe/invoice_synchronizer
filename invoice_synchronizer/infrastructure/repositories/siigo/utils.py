@@ -1,7 +1,23 @@
 from typing import Dict, Any, Optional, List
-from invoice_synchronizer.domain.models import User, DocumentType, TaxType, Product
+from datetime import datetime
+import re
+from invoice_synchronizer.domain import (
+    User,
+    DocumentType,
+    TaxType,
+    Product,
+    Invoice,
+    InvoiceId,
+    InvoiceStatus,
+    Payment,
+    OrderItems,
+    ParseDataError,
+)
 from invoice_synchronizer.infrastructure.config import SystemParameters
-from invoice_synchronizer.infrastructure.repositories.utils import find_mapping
+from invoice_synchronizer.infrastructure.repositories.utils import (
+    find_mapping,
+    filter_client_by_document,
+)
 
 
 def user_to_siigo_payload(client: User, contacts: Optional[Any] = None) -> Dict[str, Any]:
@@ -43,7 +59,7 @@ def user_to_siigo_payload(client: User, contacts: Optional[Any] = None) -> Dict[
             }
         ]
     )
-
+    address = re.sub(r"[^a-zA-Z0-9 ]", "", client.address)
     payload = {
         "type": "Customer",
         "person_type": person_type,
@@ -57,7 +73,7 @@ def user_to_siigo_payload(client: User, contacts: Optional[Any] = None) -> Dict[
         "vat_responsible": "false",
         "fiscal_responsibilities": [{"code": client.responsibilities.value}],
         "address": {
-            "address": client.address,
+            "address": address,
             "city": {
                 "country_code": str(client.city_detail.country_code),
                 "state_code": state_code,
@@ -157,5 +173,212 @@ def product_to_siigo_payload(
         "unit_label": "unidad",
         "reference": "REF1",
         "description": ".",
+    }
+    return payload
+
+
+def define_siigo_invoice(
+    system_parameters: SystemParameters,
+    data: List[Dict[str, Any]],
+    clients: List[User],
+) -> Dict[str, Invoice]:
+
+    invoices: Dict[str, Invoice] = {}
+    for invoice_info in data:
+        try:
+            # select client
+            client_document = int(invoice_info["customer"]["identification"])
+            client = filter_client_by_document(clients, client_document)
+
+            # Parse created time with optional milliseconds
+            date_str = invoice_info["date"]
+            try:
+                # Try with milliseconds first
+                created_time = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%f")
+            except ValueError:
+                # Fall back to format without milliseconds
+                created_time = datetime.strptime(date_str, "%Y-%m-%d")
+            # anulated_time = datetime.strptime(invoice_info["modifiedOn"], "%Y-%m-%dT%H:%M:%S.%f%z")
+            # anulated_time = None
+            siigo_id = invoice_info["id"]
+            invoice_number = invoice_info["number"]
+            invoice_prefix = invoice_info["prefix"]
+            invoice_id = InvoiceId(prefix=invoice_prefix, number=invoice_number)
+
+            payments: List[Payment] = []
+            for payment_data in invoice_info["payments"]:
+                mapping = find_mapping(
+                    system_parameters.payments, "siigo_id", str(payment_data["id"])
+                )
+                payment_type = mapping["system_id"]
+                value = payment_data["value"]
+                payment = Payment(payment_type=payment_type, value=value)
+                payments.append(payment)
+
+            # select products
+            order_items: List[OrderItems] = []
+            taxes_values: Dict[TaxType, float] = {}
+            for product_info in invoice_info["items"]:
+                product_id = product_info["code"]
+                quantity = product_info["quantity"]
+                product = define_siigo_product(
+                    system_parameters,
+                    code=product_id,
+                    name=product_info["description"],
+                    final_price=float(product_info["total"]) / quantity,
+                    raw_taxes=product_info.get("taxes", []),
+                )
+                order_items.append(OrderItems(product=product, quantity=quantity))
+                for tax, value in product.taxes_values.items():
+                    if tax in taxes_values:
+                        taxes_values[tax] += value * quantity
+                    else:
+                        taxes_values[tax] = value * quantity
+
+            total = invoice_info["total"]
+
+            # mapping = find_mapping(
+            #     system_parameters.invoice_status, "siigo_id", invoice_info["status"]
+            # )
+            # status_type = mapping["system_id"]
+            # status = InvoiceStatus(status_type)
+            status = InvoiceStatus.PAID
+
+            invoice_obj = Invoice(
+                client=client,
+                created_on=created_time,
+                # anulated_on=anulated_time if status == InvoiceStatus.ANULATED else None,
+                anulated_on=None,
+                invoice_id=invoice_id,
+                payments=payments,
+                order_items=order_items,
+                total=total,
+                taxes_values=taxes_values,
+                status=status,
+            )
+            invoices[siigo_id] = invoice_obj
+
+        except Exception as error:
+            print(
+                f"Factura {invoice_info['prefix']}{invoice_info['number']}",
+                f"raise error: {error}",
+            )
+            raise ParseDataError(
+                (
+                    f"Factura {invoice_info['prefix']}{invoice_info['number']}"
+                    f"raise error: {error}"
+                )
+            ) from error
+    return invoices
+
+
+def update_invoices_with_credit_notes(
+    invoices: Dict[str, Invoice],
+    credit_note_data: List[Dict[str, Any]],
+) -> List[Invoice]:
+    """Update invoices with credit note information."""
+    for credit_note in credit_note_data:
+        invoice_id = credit_note["invoice"]["id"]
+        credit_note_date = datetime.strptime(credit_note["date"], "%Y-%m-%d")
+        invoice = invoices.get(invoice_id)
+        if not invoice:
+            continue
+        invoice.anulated_on = credit_note_date
+        invoice.status = InvoiceStatus.ANULATED
+    return list(invoices.values())
+
+
+def invoice_to_siigo_payload(
+    system_parameters: SystemParameters,
+    invoice: Invoice,
+    retentions: List[int],
+) -> Dict[str, Any]:
+    """Convert Invoice model to Siigo payload."""
+    mapping = find_mapping(system_parameters.prefixes, "system_id", invoice.invoice_id.prefix)
+    document_id = mapping["siigo_id"]
+    payload = {
+        "document": {"id": document_id},
+        "number": invoice.invoice_id.number,
+        "date": invoice.created_on.strftime("%Y-%m-%d"),
+        "customer": {
+            "identification": str(invoice.client.document_number),
+            "branch_office": 0,
+        },
+        "seller": 709,  # TODO: Employee mapping
+        "observations": "invoice created from pirpos2siigo software",
+        "items": [
+            {
+                "code": order.product.product_id,
+                "description": order.product.name,
+                "quantity": order.quantity,
+                "price": round(order.product.base, 6),
+                "discount": 0,
+                "taxes": [
+                    {
+                        "id": find_mapping(system_parameters.taxes, "system_id", tax.tax_name)[
+                            "siigo_id"
+                        ]
+                    }
+                    for tax in order.product.taxes
+                ],
+            }
+            for order in invoice.order_items
+        ],
+        "payments": [
+            {
+                "id": find_mapping(system_parameters.payments, "system_id", payment.payment_type)[
+                    "siigo_id"
+                ],
+                "value": payment.value,
+                "due_date": invoice.created_on.strftime("%Y-%m-%d"),
+            }
+            for payment in invoice.payments
+        ],
+        "retentions": [{"id": retention} for retention in retentions],
+    }
+    return payload
+
+
+def get_payload_credit_note(
+    invoice_id: str,
+    invoice: Invoice,
+    system_parameters: SystemParameters,
+    credit_note_docuement_id: int,
+) -> Dict[str, Any]:
+    items = []
+    for order in invoice.order_items:
+        item = {
+            "code": order.product.product_id,
+            "quantity": order.quantity,
+            "description": order.product.name,
+            "price": round(order.product.base, 6),
+            "taxes": [
+                {"id": find_mapping(system_parameters.taxes, "system_id", tax.tax_name)["siigo_id"]}
+                for tax in order.product.taxes
+            ],
+        }
+        items.append(item)
+
+    payments = []
+    for payment in invoice.payments:
+        product_payment = {
+            "id": find_mapping(system_parameters.payments, "system_id", payment.payment_type)[
+                "siigo_id"
+            ],
+            "value": round(payment.value, 2),
+            "due_date": invoice.created_on.strftime("%Y-%m-%d"),
+        }
+        payments.append(product_payment)
+
+    if invoice.anulated_on is None:
+        raise ValueError("Invoice anulated_on date is required for credit note payload.")
+
+    payload = {
+        "document": {"id": credit_note_docuement_id},
+        "date": invoice.anulated_on.strftime("%Y-%m-%d"),
+        "invoice": invoice_id,
+        "reason": "2",
+        "items": items,
+        "payments": payments,
     }
     return payload

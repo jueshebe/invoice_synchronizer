@@ -52,6 +52,18 @@ def find_mapping(
     raise ValueError(f"Mapping for {client_key}: {client_value} not found. Check system mappings.")
 
 
+def filter_client_by_document(clients: List[User], document: int) -> User:
+    """Filter client by document number."""
+
+    def filter_client(client: User, document: int = document) -> bool:
+        return client.document_number == document
+
+    filtered_clients: List[User] = list(filter(filter_client, clients))
+    if len(filtered_clients) == 0:
+        raise ValueError(f"Client with document {document} not found.")
+    return filtered_clients[0]
+
+
 # def create_invoice(
 #     configuration: Pirpos2SiigoMap,
 #     cachier_name: str,
