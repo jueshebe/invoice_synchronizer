@@ -2,7 +2,7 @@
 import json
 from typing import List, Dict, Union
 import pytest
-from pirpos2siigo.clients import (
+from invoice_synchronizer.clients import (
     load_pirpos2siigo_config,
     ErrorConfigPirposSiigo,
     create_client,

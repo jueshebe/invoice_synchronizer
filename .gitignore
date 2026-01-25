@@ -7,4 +7,3 @@ errores_clientes.json
 !configuration.JSON
 *.xlsx
 .env
-logs.txt
