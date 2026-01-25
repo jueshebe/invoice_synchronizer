@@ -1,5 +1,6 @@
 """Exposed library"""
 
+import os
 import sys
 import logging
 from datetime import datetime
@@ -28,7 +29,9 @@ class InvoiceSynchronizer:
         console_handler.setFormatter(logs_stream_formatter)
         console_handler.setLevel(level=logging.DEBUG)
 
-        file_handler = logging.FileHandler(filename="../logs.txt")
+        path_folder = os.path.join(os.path.expanduser("~"), ".config/pirpos2siigo")
+        os.makedirs(path_folder, exist_ok=True)
+        file_handler = logging.FileHandler(filename=os.path.join(path_folder, "logs.txt"))
         file_handler.setFormatter(logs_stream_formatter)
         file_handler.setLevel(level=logging.DEBUG)
 

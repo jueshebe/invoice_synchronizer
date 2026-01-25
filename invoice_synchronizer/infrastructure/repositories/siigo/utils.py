@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 import re
 from invoice_synchronizer.domain import (
@@ -272,11 +272,22 @@ def define_siigo_invoice(
     return invoices
 
 
+def get_invoice_number_2_siigo_id_mapping(invoice_by_id: Dict[str, Invoice]) -> Dict[str, str]:
+    """Get mapping from invoice number to siigo id."""
+    mapping: Dict[str, str] = {}
+    for siigo_id, invoice in invoice_by_id.items():
+        invoice_number_str = f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}"
+        mapping[invoice_number_str] = siigo_id
+    return mapping
+
+
 def update_invoices_with_credit_notes(
     invoices: Dict[str, Invoice],
     credit_note_data: List[Dict[str, Any]],
-) -> List[Invoice]:
+    credit_note_doc_name_acentry: Dict[str, str],
+) -> Tuple[List[Invoice], Dict[str, str]]:
     """Update invoices with credit note information."""
+    invoice_id_to_credit_acentry_id: Dict[str, str] = {}
     for credit_note in credit_note_data:
         invoice_id = credit_note["invoice"]["id"]
         credit_note_date = datetime.strptime(credit_note["date"], "%Y-%m-%d")
@@ -285,13 +296,17 @@ def update_invoices_with_credit_notes(
             continue
         invoice.anulated_on = credit_note_date
         invoice.status = InvoiceStatus.ANULATED
-    return list(invoices.values())
+        invoice_id_to_credit_acentry_id[invoice_id] = credit_note_doc_name_acentry[
+            credit_note["name"]
+        ]
+    return list(invoices.values()), invoice_id_to_credit_acentry_id
 
 
 def invoice_to_siigo_payload(
     system_parameters: SystemParameters,
     invoice: Invoice,
     retentions: List[int],
+    seller_id: int,
 ) -> Dict[str, Any]:
     """Convert Invoice model to Siigo payload."""
     mapping = find_mapping(system_parameters.prefixes, "system_id", invoice.invoice_id.prefix)
@@ -304,7 +319,7 @@ def invoice_to_siigo_payload(
             "identification": str(invoice.client.document_number),
             "branch_office": 0,
         },
-        "seller": 709,  # TODO: Employee mapping
+        "seller": seller_id,
         "observations": "invoice created from pirpos2siigo software",
         "items": [
             {

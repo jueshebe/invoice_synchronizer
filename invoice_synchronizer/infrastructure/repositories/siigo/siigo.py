@@ -1,29 +1,21 @@
 """Siigo client."""
 
-from typing import List, Tuple, Dict, Optional, Any
+from typing import List, Dict, Optional, Any
 import os
-import re
-import time
 import json
 from datetime import datetime, timedelta
-import logging
 from logging import Logger
 import requests
 from invoice_synchronizer.domain import (
     User,
-    DocumentType,
     Product,
     Invoice,
-    TaxType,
     InvoiceStatus,
     AuthenticationError,
     FetchDataError,
     UploadError,
     UpdateError,
     PlatformConnector,
-)
-from invoice_synchronizer.infrastructure.repositories.utils import (
-    create_invoice,
 )
 from invoice_synchronizer.infrastructure.config import SiigoConfig
 from invoice_synchronizer.infrastructure.repositories.siigo.utils import (
@@ -34,6 +26,7 @@ from invoice_synchronizer.infrastructure.repositories.siigo.utils import (
     update_invoices_with_credit_notes,
     invoice_to_siigo_payload,
     get_payload_credit_note,
+    get_invoice_number_2_siigo_id_mapping,
 )
 from invoice_synchronizer.infrastructure.repositories.rate_limiter.rate_limiter import RateLimiter
 
@@ -48,14 +41,16 @@ class SiigoConnector(PlatformConnector):
         self.__siigo_username = siigo_config.siigo_username
         self.__siigo_access_key = siigo_config.siigo_access_key
         self.__configuration = siigo_config.system_mapping
-        self.__products: List[Product]
         self.__page_size = 500
-        self.__batch_products: int = 100
         self.__timeout = siigo_config.timeout
         self.default_client = siigo_config.default_user
         self.retentions = siigo_config.retentions
-        self.credit_note_document_id = 13143
-        self._rate_limiter = RateLimiter(max_requests_per_minute=90, logger=logger)
+        self.credit_note_document_id = siigo_config.credit_note_id
+        self.seller_id = siigo_config.seller_id
+        self._rate_limiter = RateLimiter(
+            max_requests_per_minute=siigo_config.max_requests_per_minute, logger=logger
+        )
+        self.__token_max_hours_time_alive = siigo_config.token_max_hours_time_alive
         self.__siigo_access_token = self.__get_siigo_access_token()
 
         # Credit note date range configuration
@@ -65,6 +60,8 @@ class SiigoConnector(PlatformConnector):
         self.__documents_to_siigo_id: Dict[int, str] = {}
         self.__documents_to_raw_user: Dict[int, Any] = {}
         self.__productid_to_siigo_id: Dict[str, str] = {}
+        self.__invoice_number_to_siigo_id: Dict[str, str] = {}
+        self.__invoice_id_to_credit_note_acentry_id: Dict[str, str] = {}
         logger.info("Siigo connector initialized.")
 
     def __get_siigo_access_token(self) -> str:
@@ -88,9 +85,11 @@ class SiigoConnector(PlatformConnector):
             with open(file_path, "r", encoding="utf-8") as file:
                 dict_data = json.loads(file.read())
             access_token = dict_data["token"]
-            time = datetime.strptime(dict_data["time"], "%Y-%m-%d-%H-%M")
-            if (datetime.now() - time).total_seconds() / 3600 < 10:
-                return access_token
+            saved_time = datetime.strptime(dict_data["time"], "%Y-%m-%d-%H-%M")
+            if (
+                datetime.now() - saved_time
+            ).total_seconds() / 3600 < self.__token_max_hours_time_alive:
+                return str(access_token)
 
         url = "https://api.siigo.com/auth"
         values = {
@@ -459,7 +458,6 @@ class SiigoConnector(PlatformConnector):
             else:
                 url = next_link
 
-        self.__logger.info(f"Retrieved {len(credit_notes)} credit notes from Siigo")
         return credit_notes
 
     def get_invoices(self, init_day: datetime, end_day: datetime) -> List[Invoice]:
@@ -473,6 +471,9 @@ class SiigoConnector(PlatformConnector):
         clients = self.get_clients()
         credit_note_end_date = end_day + timedelta(days=self.credit_note_forward_days)
         credit_note_data = self._get_credit_note(init_day, credit_note_end_date)
+        credit_note_doc_name_acentry = self.get_credit_note_acentryid(
+            init_day, credit_note_end_date
+        )
 
         day1 = init_day.strftime("%Y-%m-%d")
         day2 = (end_day + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -513,14 +514,67 @@ class SiigoConnector(PlatformConnector):
                 clients=clients,
             )
             invoices_by_id.update(batch_invoices)
+            self.__invoice_number_to_siigo_id.update(
+                get_invoice_number_2_siigo_id_mapping(invoices_by_id)
+            )
 
             next_link = response_ob["_links"].get("next", {"href": None})["href"]
             if len(data) == 0 or next_link is None:
                 break
             else:
                 url = next_link
-        invoices = update_invoices_with_credit_notes(invoices_by_id, credit_note_data)
+        invoices, invoice_id_to_credit_note_id = update_invoices_with_credit_notes(
+            invoices_by_id, credit_note_data, credit_note_doc_name_acentry
+        )
+        self.__invoice_id_to_credit_note_acentry_id.update(invoice_id_to_credit_note_id)
         return invoices
+
+    def get_credit_note_acentryid(self, init_day: datetime, end_day: datetime) -> Dict[str, str]:
+        url = "https://services.siigo.com/document/api/v1/reports/getreport"
+        headers = {
+            "Authorization": self.__siigo_access_token,
+            "Content-Type": "application/json",
+        }
+        take = 100
+        skip = 0
+        credit_note_acentry: Dict[str, str] = {}
+        while True:
+            payload = json.dumps(
+                {
+                    "Id": 5349,
+                    "Skip": skip,
+                    "Take": take,
+                    "Sort": " ",
+                    "FilterCriterias": '[{"Field":"DocDate","Value":["'
+                    + init_day.strftime("%Y%m%d")
+                    + '","'
+                    + end_day.strftime("%Y%m%d")
+                    + '"],"Source":"[]"},{"Field":"_var_DocClass","FilterType":7,"OperatorType":0,"Value":["3"],"ValueUI":"Nota crédito","Source":"SalesTransactionEnum"}]',
+                    "GetTotalCount": True,
+                    "GridOrderCriteria": None,
+                    "AddOns": None,
+                }
+            )
+            self._rate_limiter.wait_if_needed()
+            response = requests.request(
+                "POST",
+                url,
+                headers=headers,
+                data=payload,
+                timeout=self.__timeout,
+            )
+            if not response.ok:
+                raise FetchDataError(
+                    f"Can't download Siigo credit notes ACEntryID\n {response.text}"
+                )
+            data = response.json()["data"]["Value"]["Table"]
+            for credit_note in data:
+                doc_name = credit_note["DocName"]
+                credit_note_acentry[doc_name] = credit_note["ACEntryID"]
+            if len(data) == 0:
+                break
+            skip += take
+        return credit_note_acentry
 
     def create_invoice(self, invoice: Invoice) -> None:
         """Create invoice."""
@@ -532,6 +586,7 @@ class SiigoConnector(PlatformConnector):
         }
 
         payload = invoice_to_siigo_payload(self.__configuration, invoice, self.retentions)
+        self._rate_limiter.wait_if_needed()
         response = requests.request(
             "POST", url, headers=headers, data=str(payload), timeout=self.__timeout
         )
@@ -540,14 +595,14 @@ class SiigoConnector(PlatformConnector):
                 self.__logger.warning(
                     f"Document {invoice.invoice_id.prefix}{invoice.invoice_id.number} already exists"
                 )
-                return  # TODO: eliminate
-            raise UploadError(f"Can't create invoice\n {response.text}")
+            else:
+                raise UploadError(f"Can't create invoice\n {response.text}")
 
         if invoice.status == InvoiceStatus.ANULATED:
             invoice_id = response.json()["id"]
-            self._credit_note(invoice, invoice_id)
+            self._create_credit_note(invoice, invoice_id)
 
-    def _credit_note(self, invoice: Invoice, invoice_id: str) -> None:
+    def _create_credit_note(self, invoice: Invoice, invoice_id: str) -> None:
         """Anulate invoice by credit note."""
         url = "https://api.siigo.com/v1/credit-notes"
         headers = {
@@ -558,6 +613,7 @@ class SiigoConnector(PlatformConnector):
         payload = get_payload_credit_note(
             invoice_id, invoice, self.__configuration, self.credit_note_document_id
         )
+        self._rate_limiter.wait_if_needed()
         response = requests.request(
             "POST", url, headers=headers, data=str(payload), timeout=self.__timeout
         )
@@ -566,85 +622,54 @@ class SiigoConnector(PlatformConnector):
 
     def update_invoice(self, invoice: Invoice) -> None:
         """Create invoice."""
-        url = "https://api.siigo.com/v1/invoices/{invoice_id}"
+        invoice_siigo_id = self.__invoice_number_to_siigo_id.get(
+            f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}"
+        )
+        if invoice_siigo_id is None:
+            self.get_invoices(invoice.created_on, invoice.created_on)
+            invoice_siigo_id = self.__invoice_number_to_siigo_id.get(
+                f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}"
+            )
+            if invoice_siigo_id is None:
+                raise UpdateError(
+                    f"Siigo ID for invoice {invoice.invoice_id.prefix}{invoice.invoice_id.number} not found."
+                )
+
+        if (
+            invoice.status == InvoiceStatus.ANULATED
+            and self.__invoice_id_to_credit_note_acentry_id.get(invoice_siigo_id)
+        ):
+            credit_note_id = self.__invoice_id_to_credit_note_acentry_id[invoice_siigo_id]
+            self._delete_credit_note(invoice_siigo_id, credit_note_id)
+
+        url = f"https://api.siigo.com/v1/invoices/{invoice_siigo_id}"
         headers = {
             "authorization": self.__siigo_access_token,
             "content-type": "application/json",
+            "Partner-Id": "DesarrolloPropio",
         }
 
-        payload = {
-            "document": {"id": invoice.invoice_prefix.siigo_id},
-            "number": invoice.invoice_number,
-            "date": invoice.created_on.strftime("%Y-%m-%d"),
-            "customer": {
-                "identification": str(invoice.client.document),
-                "branch_office": 0,
-            },
-            "seller": 709,  # TODO: Employee mapping
-            "observations": "invoice created from pirpos2siigo software",
-            "items": [
-                {
-                    "code": invoice_product.product.product_id,
-                    "description": invoice_product.product.name,
-                    "quantity": invoice_product.quantity,
-                    "price": round(
-                        invoice_product.price / (1 + invoice_product.tax.value),
-                        2,
-                    ),
-                    "discount": 0,
-                    "taxes": [{"id": invoice_product.tax.siigo_id}],
-                }
-                for invoice_product in invoice.products
-            ],
-            "payments": [
-                {
-                    "id": pay_method[0].siigo_id,
-                    "value": pay_method[1],
-                    "due_date": invoice.created_on.strftime("%Y-%m-%d"),
-                }
-                for pay_method in invoice.payment_method
-            ],
-            "retentions": [
-                {"id": retention.siigo_id} for retention in self.__configuration.retentions
-            ],
+        payload = invoice_to_siigo_payload(self.__configuration, invoice, self.retentions)
+        self._rate_limiter.wait_if_needed()
+        response = requests.request(
+            "PUT", url, headers=headers, data=str(payload), timeout=self.__timeout
+        )
+        if not response.ok:
+            raise UploadError(f"Can't create invoice\n {response.text}")
+
+        if invoice.status == InvoiceStatus.ANULATED:
+            self._create_credit_note(invoice, invoice_siigo_id)
+
+    def _delete_credit_note(self, invoice_id: str, ac_entry_id: str) -> None:
+        """Update invoice credit note."""
+        url = f"https://servicespd.siigo.com/ACEntryApi/api/v2/CreditNote/Remove/{ac_entry_id}"
+        headers = {
+            "accept": "application/json, text/plain, */*",
+            "authorization": self.__siigo_access_token,
         }
+        self._rate_limiter.wait_if_needed()
+        response = requests.request("DELETE", url, headers=headers, timeout=self.__timeout)
+        if not response.ok:
+            raise UploadError(f"Can't cancel invoice {response.text}")
 
-        for retries in range(30):
-            response = requests.request(
-                "PUT",
-                url.format(invoice_id=invoice.siigo_id),
-                headers=headers,
-                data=str(payload),
-            )
-            if not response.ok:
-                # if response.json()["Errors"][0]["Code"] == "already_exists":
-                #     self.__logger.warning(
-                #         f"Document {invoice.invoice_prefix}{invoice.invoice_number} already exists"
-                #     )
-                #     return
-
-                if response.json()["Errors"][0]["Code"] == "duplicated_document":
-                    self.__logger.info("duplicated_document error. try to send it again")
-                    time.sleep(2)
-
-                elif response.json()["Errors"][0]["Code"] == "invalid_total_payments":
-                    message = response.json()["Errors"][0]["Message"]
-                    self.__logger.warning(message)
-                    pyment = [int(s) for s in re.findall(r"\b\d+\b", message)][0]
-                    self.__logger.info(
-                        "payment modified from {0} to {1}".format(
-                            payload["payments"][0]["value"], pyment
-                        )
-                    )
-                    payload["payments"] = (
-                        [  # este ajuste elimina otros metedos de pago asociados !!cuidado!!
-                            {
-                                "id": payload["payments"][0]["id"],
-                                "value": pyment,
-                            }
-                        ]
-                    )
-            else:
-                return
-
-        raise ErrorUpdatingSiigoInvoice(f"Can't update invoice\n {response.text}")
+        del self.__invoice_id_to_credit_note_acentry_id[invoice_id]

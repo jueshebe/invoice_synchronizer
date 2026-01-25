@@ -1,1 +1,0 @@
-from invoice_synchronizer.clients.utils  import load_pirpos2siigo_config

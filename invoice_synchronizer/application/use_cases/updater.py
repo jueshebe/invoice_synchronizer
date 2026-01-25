@@ -137,10 +137,11 @@ class Updater:
             outdated_invoices,
             _,
         ) = get_missing_outdated_invoices(ref_invoices, unchecked_invoices)
-
-        total: float = 0.0
-        for ref_invoice in ref_invoices:
-            total += ref_invoice.total
+        self.logger.info(
+            "Found %s missing and %s outdated invoices",
+            len(missing_invoices),
+            len(outdated_invoices),
+        )
 
         for counter, invoice in enumerate(outdated_invoices):
             try:
@@ -158,10 +159,6 @@ class Updater:
                     "error": str(error),
                 }
                 save_error(error_data, "../invoices_error.json")
-
-        if len(missing_invoices) + len(outdated_invoices) == 0:
-            self.logger.info("All invoices already updated.")
-            return
 
         for _ in range(100):
             failed_invoices = []

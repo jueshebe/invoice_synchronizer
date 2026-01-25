@@ -4,7 +4,7 @@ import os
 from typing import Dict, Union, List
 import json
 from pydantic import BaseModel
-from invoice_synchronizer.domain import User
+from invoice_synchronizer.domain import User, ConfigError
 
 MAPPING_VALUES = Union[str, float, int]
 
@@ -43,12 +43,16 @@ class PirposConfig(BaseModel):
 class SiigoConfig(BaseModel):
     """Siigo configuration model."""
 
-    siigo_username: str = os.environ["SIIGO_USER_NAME"]
-    siigo_access_key: str = os.environ["SIIGO_ACCESS_KEY"]
+    siigo_username: str
+    siigo_access_key: str
     default_user: User
     timeout: int = 30
     system_mapping: SystemParameters
     retentions: List[int] = []
+    credit_note_id: int
+    seller_id: int
+    max_requests_per_minute: int
+    token_max_hours_time_alive: int
 
 
 class SystemConfig:
@@ -87,14 +91,30 @@ class SystemConfig:
     def define_siigo_config(self) -> SiigoConfig:
         """Define system configuration."""
         file = os.environ.get("SIIGO_CONFIG_PATH", "SIIGO_CONFIGURATION.json")
-        with open(file, "r", encoding="utf-8") as siigo_config_file:
-            json_data = json.load(siigo_config_file)
+        try:
+            with open(file, "r", encoding="utf-8") as siigo_config_file:
+                json_data = json.load(siigo_config_file)
+        except Exception as e:
+            raise ConfigError(f"Error loading Siigo configuration file {file}") from e
+
+        try:
             retentions = json_data.get("retentions", [])
+            credit_note_id = json_data["credit_note_id"]
+            seller_id = json_data["seller_id"]
+            max_requests_per_minute = json_data["max_requests_per_minute"]
+            token_max_hours_time_alive = json_data["token_max_hours_time_alive"]
+        except KeyError as e:
+            raise ConfigError(f"Missing Siigo configuration key: {e}") from e
+
         siigo_config = SiigoConfig(
             siigo_username=os.environ["SIIGO_USER_NAME"],
             siigo_access_key=os.environ["SIIGO_ACCESS_KEY"],
             default_user=self.default_user,
             system_mapping=self.system_config,
             retentions=retentions,
+            credit_note_id=credit_note_id,
+            seller_id=seller_id,
+            max_requests_per_minute=max_requests_per_minute,
+            token_max_hours_time_alive=token_max_hours_time_alive,
         )
         return siigo_config
