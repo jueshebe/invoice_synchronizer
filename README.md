@@ -67,7 +67,7 @@ SIIGO_ACCESS_KEY=your_siigo_access_key
 
 ### 2. `SIIGO_CONFIGURATION.json` File
 
-Configure SIIGO specific parameters:
+Create this file in the project root and configure SIIGO specific parameters:
 
 ```json
 {
@@ -75,7 +75,8 @@ Configure SIIGO specific parameters:
     "credit_note_id": 13143,
     "seller_id": 709,
     "max_requests_per_minute": 90,
-    "token_max_hours_time_alive": 10
+    "token_max_hours_time_alive": 10,
+    "credit_note_forward_days": 60
 }
 ```
 
@@ -85,10 +86,11 @@ Configure SIIGO specific parameters:
 - `seller_id`: Seller ID in SIIGO (used to associate the invoices with a seller)
 - `max_requests_per_minute`: API request limit per minute for SIIGO
 - `token_max_hours_time_alive`: Token lifetime in hours
+- `credit_note_forward_days`: Days to extend the search window from the initial invoice date to find and associate related credit notes
 
 ### 3. `SYSTEM_CONFIGURATION.JSON` File
 
-Configure mappings between the System, Loggro and Siigo:
+Create this file in the project root and configure mappings between the System, Loggro and Siigo:
 
 ```json
 {
@@ -150,7 +152,7 @@ Configure mappings between the System, Loggro and Siigo:
 
 ### 4. `default_user.json` File
 
-Configure the default client for invoices without a specific client:
+Create this file in the project root and configure the default client for invoices without a specific client:
 
 ```json
 {

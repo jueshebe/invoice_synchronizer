@@ -54,7 +54,7 @@ class SiigoConnector(PlatformConnector):
         self.__siigo_access_token = self.__get_siigo_access_token()
 
         # Credit note date range configuration
-        self.credit_note_forward_days = 60
+        self.credit_note_forward_days = siigo_config.credit_note_forward_days
 
         # ids mapping to operate with API
         self.__documents_to_siigo_id: Dict[int, str] = {}

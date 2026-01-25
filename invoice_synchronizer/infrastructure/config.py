@@ -52,6 +52,7 @@ class SiigoConfig(BaseModel):
     seller_id: int
     max_requests_per_minute: int
     token_max_hours_time_alive: int
+    credit_note_forward_days: int
 
 
 class SystemConfig:
@@ -102,6 +103,7 @@ class SystemConfig:
             seller_id = json_data["seller_id"]
             max_requests_per_minute = json_data["max_requests_per_minute"]
             token_max_hours_time_alive = json_data["token_max_hours_time_alive"]
+            credit_note_forward_days = json_data["credit_note_forward_days"]
         except KeyError as e:
             raise ConfigError(f"Missing Siigo configuration key: {e}") from e
 
@@ -115,5 +117,6 @@ class SystemConfig:
             seller_id=seller_id,
             max_requests_per_minute=max_requests_per_minute,
             token_max_hours_time_alive=token_max_hours_time_alive,
+            credit_note_forward_days=credit_note_forward_days,
         )
         return siigo_config

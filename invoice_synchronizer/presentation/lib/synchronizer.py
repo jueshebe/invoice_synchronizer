@@ -54,8 +54,8 @@ if __name__ == "__main__":
 
     # synchronizer.updater.update_products()
     # synchronizer.updater.update_clients()
-    init_date = datetime(2026, 1, 2)
-    end_date = datetime(2026, 1, 2)
+    init_date = datetime(2026, 1, 3)
+    end_date = datetime(2026, 1, 3)
     synchronizer.updater.update_invoices(init_date, end_date)
     # invoices = synchronizer.updater.target_client.get_invoices(init_date, end_date)
     # invoices_source = synchronizer.updater.source_client.get_invoices(init_date, end_date)
