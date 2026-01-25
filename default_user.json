@@ -1,0 +1,18 @@
+{
+    "name": "Consumidor Final",
+    "last_name": null,
+    "email": "no-reply@pirpos.com",
+    "phone": "3102830171",
+    "address": "calle 35#27-16",
+    "document_number": 222222222222,
+    "check_digit": null,
+    "document_type": 13,
+    "responsibilities": "R-99-PN",
+    "city_detail": {
+        "city_name": "Villavicencio",
+        "city_state": "Meta",
+        "city_code": "50001",
+        "country_code": "Co",
+        "state_code": "50"
+    }
+}

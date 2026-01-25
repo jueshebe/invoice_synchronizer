@@ -3,7 +3,6 @@ errors/
 __pycache__
 .DS_Store
 errores_clientes.json
-*.json
-!configuration.JSON
 *.xlsx
 .env
+.vscode
