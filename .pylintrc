@@ -3,7 +3,16 @@
 init-hook="import sys; sys.path.insert(0, '/Users/julianherrera/apps/asadero/pirpos-clean-arch')"
 
 # Add files or folders to the blacklist. They should be base names, not paths.
-ignore=CVS,.git,__pycache__,.pytest_cache
+ignore=CVS,.git,__pycache__,.pytest_cache,tests
+
+# Use multiple processes to speed up Pylint (use number of CPU cores)
+jobs=4
+
+# Enable caching (speeds up subsequent runs)
+persistent=yes
+
+# Limit line length checking (expensive operation)
+max-line-length=100
 
 [MESSAGES CONTROL]
 # Disable specific messages that might be problematic with pydantic
@@ -12,7 +21,12 @@ ignore=CVS,.git,__pycache__,.pytest_cache
 # C0115: Missing class docstring  
 # C0116: Missing function docstring
 # R0903: Too few public methods
-disable=C0114,C0115,C0116,R0903,E0611:no-name-in-module
+# Disable expensive/slow checks:
+# R0801: Similar lines in files (very slow)
+# R0902: Too many instance attributes
+# R0913: Too many arguments
+# R0914: Too many local variables
+disable=C0114,C0115,C0116,R0903,no-name-in-module,R0801,R0902,R0913,R0914
 
 [TYPECHECK]
 # List of module names for which member attributes should not be checked

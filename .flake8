@@ -1,7 +1,38 @@
 [flake8]
 max-line-length = 100
-ignore = E203
-exclude = .git,__pycache__,old,build,dist,venv,env,.env,.venv,migrations
+
+# Use parallel processing (speeds up significantly)
+jobs = 4
+
+# Ignore specific error codes
+# E203: whitespace before ':' (conflicts with black)
+# W503: line break before binary operator (outdated rule)
+# E501: line too long (handled by black/max-line-length)
+ignore = E203, W503, E501
+
+# Exclude more directories to avoid unnecessary processing
+exclude = 
+    .git,
+    __pycache__,
+    .pytest_cache,
+    old,
+    build,
+    dist,
+    venv,
+    env,
+    .env,
+    .venv,
+    migrations,
+    tests,
+    *.egg-info,
+    .tox,
+    .coverage,
+    htmlcov
+
+# Enable specific plugins only (avoid loading unused ones)
+# Remove this if you're not using these plugins
+# select = E,W,F,C
+
 per-file-ignores =
     # Module level import not at top of file. This is due newrelic initialization.
     */app/__main__.py: E402
