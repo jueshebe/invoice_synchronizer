@@ -1,0 +1,106 @@
+{
+    "payments": [
+        {
+            "pirpos_id": "Efectivo",
+            "system_id": "Efectivo",
+            "siigo_id": 3025
+        },
+        {
+            "pirpos_id": "Tarjeta débito",
+            "system_id": "Transferencia bancaria",
+            "siigo_id": 3027
+        },
+        {
+            "pirpos_id": "Transferencia bancaria",
+            "system_id": "Transferencia bancaria",
+            "siigo_id": 3027
+        },
+        {
+            "pirpos_id": "Tarjeta crédito",
+            "system_id": "Transferencia bancaria",
+            "siigo_id": 3027
+        },
+        {
+            "pirpos_id": "Transferencia bancaria",
+            "system_id": "Transferencia bancaria",
+            "siigo_id": 8434
+        },
+        {
+            "pirpos_id": "Transferencia bancaria",
+            "system_id": "Transferencia bancaria",
+            "siigo_id": 7300
+        },
+        {
+            "pirpos_id": "Domicilio",
+            "system_id": "Domicilio",
+            "siigo_id": 3025
+        },
+        {
+            "pirpos_id": "Rappi",
+            "system_id": "Rappi",
+            "siigo_id": 7325
+        },
+        {
+            "pirpos_id": "Link de pago",
+            "system_id": "Link de pago",
+            "siigo_id": 12023
+        }
+    ],
+    "taxes": [
+        {
+            "pirpos_id": "I CONSUMO",
+            "system_id": "I CONSUMO",
+            "siigo_id": "7081",
+            "value": 0.08
+        },
+        {
+            "pirpos_id": "IVA19",
+            "system_id": "IVA 19%",
+            "siigo_id": "7066",
+            "value": 0.19
+        }
+    ],
+    "prefixes": [
+        {
+            "system_id": "LL",
+            "pirpos_id": "LL",
+            "siigo_id": 13136,
+            "siigo_code": 1
+        },
+        {
+            "system_id": "LL",
+            "pirpos_id": "LL.",
+            "siigo_id": 13136,
+            "siigo_code": 1
+        },
+        {
+            "system_id": "",
+            "pirpos_id": "",
+            "siigo_id": 27233,
+            "siigo_code": 3
+        },
+        {
+            "system_id": "FVE",
+            "pirpos_id": "FVE",
+            "siigo_id": 28091,
+            "siigo_code": 4
+        }
+    ],
+    "invoice_status": [
+        {
+            "pirpos_id": "Pagada",
+            "system_id": "PAID",
+            "siigo_id": 1
+        },
+        {
+            "pirpos_id": "Anulada",
+            "system_id": "ANULATED",
+            "siigo_id": 3
+        },
+        {
+            "pirpos_id": "Pendiente",
+            "system_id": "PENDING",
+            "siigo_id": 2
+        }
+    ]
+}
