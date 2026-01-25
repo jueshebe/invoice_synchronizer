@@ -5,7 +5,7 @@ import os
 import json
 from datetime import datetime, timedelta
 from logging import Logger
-import requests
+import requests  # type: ignore
 from invoice_synchronizer.domain import (
     User,
     Product,
@@ -585,7 +585,9 @@ class SiigoConnector(PlatformConnector):
             "Partner-Id": "DesarrolloPropio",
         }
 
-        payload = invoice_to_siigo_payload(self.__configuration, invoice, self.retentions)
+        payload = invoice_to_siigo_payload(
+            self.__configuration, invoice, self.retentions, self.seller_id
+        )
         self._rate_limiter.wait_if_needed()
         response = requests.request(
             "POST", url, headers=headers, data=str(payload), timeout=self.__timeout
@@ -649,7 +651,9 @@ class SiigoConnector(PlatformConnector):
             "Partner-Id": "DesarrolloPropio",
         }
 
-        payload = invoice_to_siigo_payload(self.__configuration, invoice, self.retentions)
+        payload = invoice_to_siigo_payload(
+            self.__configuration, invoice, self.retentions, self.seller_id
+        )
         self._rate_limiter.wait_if_needed()
         response = requests.request(
             "PUT", url, headers=headers, data=str(payload), timeout=self.__timeout

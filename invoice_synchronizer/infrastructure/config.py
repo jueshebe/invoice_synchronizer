@@ -19,7 +19,6 @@ class SystemParameters(BaseModel):
     taxes: list[Dict[str, MAPPING_VALUES]]
     prefixes: list[Dict[str, MAPPING_VALUES]]
     invoice_status: list[Dict[str, MAPPING_VALUES]]
-    retentions: list[Dict[str, MAPPING_VALUES]]
 
     @classmethod
     def from_json(cls, file_path: str) -> "SystemParameters":
