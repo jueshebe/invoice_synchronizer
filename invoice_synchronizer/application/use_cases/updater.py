@@ -158,7 +158,7 @@ class Updater:
                     "invoice": json.loads(invoice.json()),
                     "error": str(error),
                 }
-                save_error(error_data, "../invoices_error.json")
+                save_error(error_data, "invoices_error.json")
 
         for _ in range(100):
             failed_invoices = []
@@ -179,6 +179,12 @@ class Updater:
                         invoice.invoice_id.number,
                         error,
                     )
+                    error_data = {
+                        "type_op": "Creating",
+                        "invoice": json.loads(invoice.json()),
+                        "error": str(error),
+                    }
+                    save_error(error_data, "invoices_error.json")
 
             missing_invoices = copy(failed_invoices)
             failed_invoices = []
