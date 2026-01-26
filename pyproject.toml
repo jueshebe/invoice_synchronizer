@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "invoice_synchronizer"
 version = "3.0.0"
-description = "Invoice synchronization library between PirPOS and SIIGO platforms"
+description = "Invoice synchronization library"
 authors = ["JulianEstebanHerrera <julianesteban.herrera@mercadolibre.com.co>"]
 readme = "README.md"
 packages = [{ include = "invoice_synchronizer" }]
@@ -21,6 +21,9 @@ debugpy = "^1.6.3"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^4.0.3"
+twine = "^6.2.0"
+wheel = "^0.46.3"
+setuptools = "^80.10.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

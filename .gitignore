@@ -1,8 +1,19 @@
 documents/
-errors/
+/errors/
 __pycache__
 .DS_Store
 errores_clientes.json
 *.xlsx
 .env
 .vscode
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Poetry
+poetry.lock
+
+# PyPI
+.pypirc

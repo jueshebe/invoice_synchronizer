@@ -33,7 +33,19 @@ The project implements **Clean Architecture** with the following layers:
 - Poetry 1.8.3 (dependency manager)
 
 ### Install the project
+
+#### Option 1: From PyPI (Recommended for end users)
 ```bash
+# Install from PyPI
+pip install invoice-synchronizer
+```
+
+#### Option 2: From GitHub source (For development)
+```bash
+# Clone the repository
+git clone https://github.com/jueshebe/invoice_synchronizer.git
+cd invoice-synchronizer
+
 # Install dependencies and current application
 poetry install
 
