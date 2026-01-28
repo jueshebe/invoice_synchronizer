@@ -52,11 +52,9 @@ class InvoiceSynchronizer:
 if __name__ == "__main__":
     synchronizer = InvoiceSynchronizer()
 
-    synchronizer.updater.update_products()
-    synchronizer.updater.update_clients()
-    init_date = datetime(2026, 1, 4)
-    end_date = datetime(2026, 1, 4)
-    # synchronizer.updater.update_invoices(init_date, end_date)
-    # invoices = synchronizer.updater.target_client.get_invoices(init_date, end_date)
-    # invoices_source = synchronizer.updater.source_client.get_invoices(init_date, end_date)
+    # synchronizer.updater.update_products()
+    # synchronizer.updater.update_clients()
+    init_date = datetime(2026, 1, 20)
+    end_date = datetime(2026, 1, 20)
+    synchronizer.updater.update_invoices(init_date, end_date)
     print("Finished")

@@ -1,6 +1,5 @@
 """Updater Class."""
 
-from copy import copy
 from logging import Logger
 from datetime import datetime
 import json
@@ -146,7 +145,12 @@ class Updater:
         for counter, invoice in enumerate(outdated_invoices):
             try:
                 self.target_client.update_invoice(invoice)
-                self.logger.info("%s/%s invoice updated", counter + 1, len(outdated_invoices))
+                self.logger.info(
+                    "%s | %s/%s invoices updated",
+                    invoice.invoice_id.number,
+                    counter + 1,
+                    len(outdated_invoices),
+                )
             except Exception as error:
                 self.logger.error(
                     "Error with invoice %s%s check invoices_error.json",
@@ -160,34 +164,25 @@ class Updater:
                 }
                 save_error(error_data, "invoices_error.json")
 
-        for _ in range(100):
-            failed_invoices = []
-            for counter, invoice in enumerate(missing_invoices):
-                try:
-                    self.target_client.create_invoice(invoice)
-                    self.logger.info(
-                        "%s | %s/%s invoices created",
-                        invoice.invoice_id.number,
-                        counter + 1,
-                        len(missing_invoices),
-                    )
-                except Exception as error:
-                    failed_invoices.append(invoice)
-                    self.logger.warning(
-                        "Error with invoice %s%s\nerror: %s",
-                        invoice.invoice_id.prefix,
-                        invoice.invoice_id.number,
-                        error,
-                    )
-                    error_data = {
-                        "type_op": "Creating",
-                        "invoice": json.loads(invoice.json()),
-                        "error": str(error),
-                    }
-                    save_error(error_data, "invoices_error.json")
-
-            missing_invoices = copy(failed_invoices)
-            failed_invoices = []
-
-            if len(missing_invoices) == 0:
-                break
+        for counter, invoice in enumerate(missing_invoices):
+            try:
+                self.target_client.create_invoice(invoice)
+                self.logger.info(
+                    "%s | %s/%s invoices created",
+                    invoice.invoice_id.number,
+                    counter + 1,
+                    len(missing_invoices),
+                )
+            except Exception as error:
+                self.logger.warning(
+                    "Error with invoice %s%s\nerror: %s",
+                    invoice.invoice_id.prefix,
+                    invoice.invoice_id.number,
+                    error,
+                )
+                error_data = {
+                    "type_op": "Creating",
+                    "invoice": json.loads(invoice.json()),
+                    "error": str(error),
+                }
+                save_error(error_data, "invoices_error.json")
