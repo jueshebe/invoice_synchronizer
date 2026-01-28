@@ -1,7 +1,6 @@
 """Siigo client."""
 
 from typing import List, Dict, Optional, Any
-import re
 import os
 import json
 from datetime import datetime, timedelta
@@ -599,7 +598,7 @@ class SiigoConnector(PlatformConnector):
                     f"Document {invoice.invoice_id.prefix}{invoice.invoice_id.number} already exists"
                 )
             elif (
-                response.json()["Errors"][0]["Code"]== "invalid_total_payments"
+                response.json()["Errors"][0]["Code"] == "invalid_total_payments"
             ):
                 if retry_count >= 1:
                     raise UploadError(f"Can't create invoice\n {response.text}")

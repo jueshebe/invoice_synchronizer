@@ -374,7 +374,7 @@ def get_payload_credit_note(
             "code": order.product.product_id,
             "quantity": order.quantity,
             "description": order.product.name,
-            "price": int(order.product.base * 1000000) / 1000000,
+            "price": round(order.product.base, 6),
             "taxes": [
                 {"id": find_mapping(system_parameters.taxes, "system_id", tax.tax_name)["siigo_id"]}
                 for tax in order.product.taxes
