@@ -576,7 +576,7 @@ class SiigoConnector(PlatformConnector):
             skip += take
         return credit_note_acentry
 
-    def create_invoice(self, invoice: Invoice) -> None:
+    def create_invoice(self, invoice: Invoice, retry_count: int = 0) -> None:
         """Create invoice."""
         url = "https://api.siigo.com/v1/invoices"
         headers = {
@@ -597,6 +597,17 @@ class SiigoConnector(PlatformConnector):
                 self.__logger.warning(
                     f"Document {invoice.invoice_id.prefix}{invoice.invoice_id.number} already exists"
                 )
+            elif (
+                response.json()["Errors"][0]["Code"] == "invalid_total_payments"
+            ):
+                if retry_count >= 1:
+                    raise UploadError(f"Can't create invoice\n {response.text}")
+                message = response.json()["Errors"][0]["Message"]
+                payment = float(message.split(" ")[-1])
+                fix_payment = payment - invoice.total 
+                invoice.payments[0].value += round(fix_payment, 2)
+                invoice.total = round(payment, 2)
+                self.create_invoice(invoice, 1)
             else:
                 raise UploadError(f"Can't create invoice\n {response.text}")
 

@@ -311,6 +311,40 @@ def invoice_to_siigo_payload(
     """Convert Invoice model to Siigo payload."""
     mapping = find_mapping(system_parameters.prefixes, "system_id", invoice.invoice_id.prefix)
     document_id = mapping["siigo_id"]
+    items = []
+
+    for order in invoice.order_items:
+        if order.product.base <= 0:
+            continue
+        item = {
+            "code": order.product.product_id,
+            "description": order.product.name,
+            "quantity": order.quantity,
+            "price": round(order.product.base, 6),
+            "discount": 0,
+            "taxpayer": "Company",
+            "taxes": [
+                {
+                    "id": find_mapping(system_parameters.taxes, "system_id", tax.tax_name)[
+                        "siigo_id"
+                    ]
+                }
+                for tax in order.product.taxes
+            ],
+        }
+        items.append(item)
+
+    payments = [] 
+    for payment in invoice.payments:
+        product_payment = {
+            "id": find_mapping(system_parameters.payments, "system_id", payment.payment_type)[
+                "siigo_id"
+            ],
+            "value": round(payment.value, 2),
+            "due_date": invoice.created_on.strftime("%Y-%m-%d"),
+        }
+        payments.append(product_payment)
+
     payload = {
         "document": {"id": document_id},
         "number": invoice.invoice_id.number,
@@ -321,34 +355,8 @@ def invoice_to_siigo_payload(
         },
         "seller": seller_id,
         "observations": "invoice created from pirpos2siigo software",
-        "items": [
-            {
-                "code": order.product.product_id,
-                "description": order.product.name,
-                "quantity": order.quantity,
-                "price": round(order.product.base, 6),
-                "discount": 0,
-                "taxes": [
-                    {
-                        "id": find_mapping(system_parameters.taxes, "system_id", tax.tax_name)[
-                            "siigo_id"
-                        ]
-                    }
-                    for tax in order.product.taxes
-                ],
-            }
-            for order in invoice.order_items
-        ],
-        "payments": [
-            {
-                "id": find_mapping(system_parameters.payments, "system_id", payment.payment_type)[
-                    "siigo_id"
-                ],
-                "value": payment.value,
-                "due_date": invoice.created_on.strftime("%Y-%m-%d"),
-            }
-            for payment in invoice.payments
-        ],
+        "items": items,
+        "payments": payments,
         "retentions": [{"id": retention} for retention in retentions],
     }
     return payload
