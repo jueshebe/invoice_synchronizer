@@ -606,10 +606,10 @@ class SiigoConnector(PlatformConnector):
                     raise UploadError(f"Can't create invoice\n {response.text}")
                 message = response.json()["Errors"][0]["Message"]
                 payment = float(message.split(" ")[-1])
-                fix_payment = payment - invoice.total 
+                fix_payment = payment - invoice.total
                 invoice.payments[0].value += round(fix_payment, 2)
                 invoice.total = round(payment, 2)
-                self.create_invoice(invoice, 1)
+                return self.create_invoice(invoice, 1)
             else:
                 raise UploadError(f"Can't create invoice\n {response.text}")
 
@@ -679,10 +679,10 @@ class SiigoConnector(PlatformConnector):
                     raise UploadError(f"Can't create invoice\n {response.text}")
                 message = response.json()["Errors"][0]["Message"]
                 payment = float(message.split(" ")[-1])
-                fix_payment = payment - invoice.total 
+                fix_payment = payment - invoice.total
                 invoice.payments[0].value += round(fix_payment, 2)
                 invoice.total = round(payment, 2)
-                self.update_invoice(invoice, 1)
+                return self.update_invoice(invoice, 1)
             else:
                 raise UploadError(f"Can't create invoice\n {response.text}")
 

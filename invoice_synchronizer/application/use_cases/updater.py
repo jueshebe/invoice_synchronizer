@@ -202,7 +202,7 @@ class Updater:
             self.logger.info("Getting invoices from target platform")
             unchecked_invoices = self.target_client.get_invoices(init_date, end_date)
 
-            # get missing and ourdated clients
+            # get missing and outdated clients
             (
                 missing_invoices,
                 outdated_invoices,
