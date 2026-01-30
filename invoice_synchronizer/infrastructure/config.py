@@ -35,7 +35,7 @@ class PirposConfig(BaseModel):
     pirpos_password: str
     batch_size: int = 200
     default_user: User
-    timeout: int = 30
+    timeout: int = 60
     system_mapping: SystemParameters
 
 
@@ -45,7 +45,7 @@ class SiigoConfig(BaseModel):
     siigo_username: str
     siigo_access_key: str
     default_user: User
-    timeout: int = 30
+    timeout: int = 60
     system_mapping: SystemParameters
     retentions: List[int] = []
     credit_note_id: int

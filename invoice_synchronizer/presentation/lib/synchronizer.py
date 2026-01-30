@@ -2,10 +2,11 @@
 
 import os
 import sys
+import json
 import logging
 from datetime import datetime
 from invoice_synchronizer.infrastructure import SystemConfig, PirposConnector, SiigoConnector
-from invoice_synchronizer.application import Updater
+from invoice_synchronizer.application import Updater, ProcessSpecificInvoices
 
 
 class InvoiceSynchronizer:
@@ -48,13 +49,39 @@ class InvoiceSynchronizer:
             logger=logger,
         )
 
+    def update_products(self) -> None:
+        """Update products from loggro to siigo."""
+        self.updater.update_products()
+    
+    def update_clients(self) -> None:
+        """Update clients from loggro to siigo."""
+        self.updater.update_clients()
+
+    def update_invoices(self, init_date: datetime, end_date: datetime, iterations: int) -> ProcessSpecificInvoices:
+        """Update invoices from loggro to siigo."""
+        error_invoices = self.updater.update_invoices_iterations(init_date, end_date, iterations)
+        return error_invoices
+
+    def update_specific_invoices(self, process_specific_invoices: ProcessSpecificInvoices) -> ProcessSpecificInvoices:
+        """Update specific invoices from loggro to siigo."""
+        error_invoices = self.updater.update_invoices(process_specific_invoices=process_specific_invoices)
+        return error_invoices
 
 if __name__ == "__main__":
     synchronizer = InvoiceSynchronizer()
 
     # synchronizer.updater.update_products()
     # synchronizer.updater.update_clients()
-    init_date = datetime(2026, 1, 20)
-    end_date = datetime(2026, 1, 20)
-    synchronizer.updater.update_invoices(init_date, end_date)
+    init_date_test = datetime(2026, 1, 1)
+    end_date_test = datetime(2026, 1, 31)
+    # error_invoices = synchronizer.update_invoices(init_date_test, end_date_test, iterations=5)
+    # if error_invoices.missing_invoices or error_invoices.outdated_invoices:
+    #     print("There were errors updating the following invoices:")
+    #     with open("error_invoices.json", "w", encoding="utf-8") as error_file:
+    #         error_file.write(error_invoices.model_dump_json(indent=4))
+
+    with open("error_invoices.json", "r", encoding="utf-8") as error_file:
+        data = json.loads(error_file.read())
+        error_invoices_data = ProcessSpecificInvoices(**data)
+    error_invoices_test = synchronizer.update_specific_invoices(error_invoices_data)
     print("Finished")
