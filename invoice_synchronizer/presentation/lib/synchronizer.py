@@ -9,10 +9,55 @@ from invoice_synchronizer.application import Updater, ProcessSpecificInvoices
 
 
 class InvoiceSynchronizer:
-    """Invoice Synchronizer class."""
+    """Invoice synchronization service between Loggro and Siigo platforms.
+    
+    This class provides a high-level interface for synchronizing business data
+    (clients, products, and invoices) between Loggro point-of-sale system and
+    Siigo accounting platform.
+    
+    The synchronization process maintains data integrity by:
+    - Creating missing records in the target system (Siigo)
+    - Updating existing records that have changed
+    - Handling errors gracefully and providing detailed logging
+    
+    Attributes:
+        pirpos_connector: Interface to Loggro system
+        siigo_connector: Interface to Siigo system  
+        updater: Core synchronization logic handler
+    
+    Example:
+        >>> from datetime import datetime
+        >>> sync = InvoiceSynchronizer()
+        >>> 
+        >>> # Synchronize reference data first
+        >>> sync.update_clients()
+        >>> sync.update_products()
+        >>> 
+        >>> # Then synchronize invoices
+        >>> result = sync.update_invoices(
+        ...     init_date=datetime(2026, 1, 1),
+        ...     end_date=datetime(2026, 1, 31),
+        ...     iterations=5
+        ... )
+    """
 
     def __init__(self):
-        """Initialize the Invoice Synchronizer."""
+        """Initialize the Invoice Synchronizer with required configurations.
+        
+        Sets up connections to both Loggro and Siigo systems, configures logging,
+        and prepares the synchronization components. 
+        
+        Requires environment variables for authentication:
+        - Loggro credentials and configuration
+        - Siigo API credentials and configuration
+        
+        The logger is configured to output to both console and a log file
+        located at ~/.config/pirpos2siigo/logs.txt
+        
+        Raises:
+            KeyError: If required environment variables are missing
+            Exception: If system configuration or connection setup fails
+        """
         system_config = SystemConfig()
         pirpos_config = system_config.define_pirpos_config()
         siigo_config = system_config.define_siigo_config()
@@ -49,20 +94,95 @@ class InvoiceSynchronizer:
         )
 
     def update_products(self) -> None:
-        """Update products from loggro to siigo."""
+        """Synchronize products from Loggro to Siigo.
+        
+        Fetches all products from Loggro and synchronizes them with Siigo.
+        Creates missing products and updates existing ones that have changed.
+        
+        This method should typically be run before synchronizing invoices to ensure
+        all product references are available in Siigo.
+        
+        Raises:
+            Exception: If connection to either Loggro or Siigo fails, or if
+                      critical product synchronization errors occur.
+        """
         self.updater.update_products()
     
     def update_clients(self) -> None:
-        """Update clients from loggro to siigo."""
+        """Synchronize clients from Loggro to Siigo.
+        
+        Fetches all clients/customers from Loggro and synchronizes them with Siigo.
+        Creates missing clients and updates existing ones that have changed.
+        
+        This method should typically be run before synchronizing invoices to ensure
+        all client references are available in Siigo.
+        
+        Raises:
+            Exception: If connection to either PirPOS or Siigo fails, or if
+                      critical client synchronization errors occur.
+        """
         self.updater.update_clients()
 
     def update_invoices(self, init_date: datetime, end_date: datetime, iterations: int) -> ProcessSpecificInvoices:
-        """Update invoices from loggro to siigo."""
+        """Update invoices from Loggro to Siigo within a date range.
+        
+        Synchronizes invoices between Loggro and Siigo platforms for the specified date range.
+        The process runs in iterations to handle large volumes of data efficiently.
+        
+        Args:
+            init_date (datetime): Start date for invoice synchronization (inclusive).
+            end_date (datetime): End date for invoice synchronization (inclusive).
+            iterations (int): Number of iterations to process the date range. Higher values
+                            process smaller batches, useful for large date ranges or rate limiting.
+        
+        Returns:
+            ProcessSpecificInvoices: Object containing lists of invoices that failed to sync:
+                - missing_invoices: Invoices present in Loggro but not in Siigo
+                - outdated_invoices: Invoices that exist in both systems but differ
+        
+        Example:
+            >>> from datetime import datetime
+            >>> sync = InvoiceSynchronizer()
+            >>> result = sync.update_invoices(
+            ...     init_date=datetime(2026, 1, 1),
+            ...     end_date=datetime(2026, 1, 31),
+            ...     iterations=5
+            ... )
+            >>> print(f"Failed invoices: {len(result.missing_invoices)}")
+        """
         error_invoices = self.updater.update_invoices_iterations(init_date, end_date, iterations)
         return error_invoices
 
     def update_specific_invoices(self, process_specific_invoices: ProcessSpecificInvoices) -> ProcessSpecificInvoices:
-        """Update specific invoices from loggro to siigo."""
+        """Process specific invoices that previously failed synchronization.
+        
+        Takes a ProcessSpecificInvoices object containing missing or outdated invoices
+        and attempts to synchronize them again. This is typically used to retry
+        invoices that failed in a previous synchronization run.
+        
+        Args:
+            process_specific_invoices (ProcessSpecificInvoices): Object containing:
+                - missing_invoices: List of invoices to create in Siigo
+                - outdated_invoices: List of invoices to update in Siigo
+        
+        Returns:
+            ProcessSpecificInvoices: Object with any invoices that still failed to sync
+            after this retry attempt. Empty lists indicate complete success.
+        
+        Example:
+            >>> # Load previously failed invoices from JSON
+            >>> with open("error_invoices.json", "r") as f:
+            ...     data = json.load(f)
+            >>> failed_invoices = ProcessSpecificInvoices(**data)
+            >>> 
+            >>> # Retry synchronization
+            >>> sync = InvoiceSynchronizer()
+            >>> result = sync.update_specific_invoices(failed_invoices)
+            >>> 
+            >>> # Check if any invoices still failed
+            >>> if not result.missing_invoices and not result.outdated_invoices:
+            ...     print("All invoices synchronized successfully!")
+        """
         error_invoices = self.updater.update_invoices(process_specific_invoices=process_specific_invoices)
         return error_invoices
 
@@ -72,7 +192,7 @@ if __name__ == "__main__":
 
     synchronizer.updater.update_products()
     synchronizer.updater.update_clients()
-    init_date = datetime(2026, 1, 20)
-    end_date = datetime(2026, 1, 20)
-    synchronizer.updater.update_invoices(init_date, end_date)
+    init_date_test = datetime(2026, 1, 20)
+    end_date_test = datetime(2026, 1, 20)
+    synchronizer.updater.update_invoices(init_date_test, end_date_test)
     print("Finished")
