@@ -2,7 +2,6 @@
 
 import os
 import sys
-import json
 import logging
 from datetime import datetime
 from invoice_synchronizer.infrastructure import SystemConfig, PirposConnector, SiigoConnector
@@ -66,6 +65,7 @@ class InvoiceSynchronizer:
         """Update specific invoices from loggro to siigo."""
         error_invoices = self.updater.update_invoices(process_specific_invoices=process_specific_invoices)
         return error_invoices
+
 
 if __name__ == "__main__":
     synchronizer = InvoiceSynchronizer()
