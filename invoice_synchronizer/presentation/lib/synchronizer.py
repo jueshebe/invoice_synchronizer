@@ -157,7 +157,7 @@ class InvoiceSynchronizer:
     def update_specific_invoices(self, process_specific_invoices: InvoicesProcessReport) -> InvoicesProcessReport:
         """Process specific invoices that previously failed synchronization.
         
-        Takes a ProcessSpecificInvoices object containing missing or outdated invoices
+        Takes a InvoicesProcessReport object containing missing or outdated invoices
         and attempts to synchronize them again. This is typically used to retry
         invoices that failed in a previous synchronization run.
         
@@ -174,7 +174,7 @@ class InvoiceSynchronizer:
             >>> # Load previously failed invoices from JSON
             >>> with open("error_invoices.json", "r") as f:
             ...     data = json.load(f)
-            >>> failed_invoices = ProcessSpecificInvoices(**data)
+            >>> failed_invoices = InvoicesProcessReport(**data)
             >>> 
             >>> # Retry synchronization
             >>> sync = InvoiceSynchronizer()

@@ -310,17 +310,17 @@ from datetime import datetime
 start_date = datetime(2026, 1, 1)
 end_date = datetime(2026, 1, 31)
 
-# This returns a ProcessSpecificInvoices object with failed invoices
+# This returns a InvoicesProcessReport object with failed invoices
 error_invoices = synchronizer.update_invoices(start_date, end_date, iterations=5)
 
 # Save errors to file for later processing
-if error_invoices.missing_invoices or error_invoices.outdated_invoices:
+if error_invoices.error_missing_invoices or error_invoices.error_outdated_invoices:
     print("There were errors updating the following invoices:")
     with open("error_invoices.json", "w", encoding="utf-8") as error_file:
         error_file.write(error_invoices.model_dump_json(indent=4))
     
-    print(f"❌ {len(error_invoices.missing_invoices)} missing invoices")
-    print(f"❌ {len(error_invoices.outdated_invoices)} outdated invoices")
+    print(f"❌ {len(error_invoices.error_missing_invoices)} missing invoices")
+    print(f"❌ {len(error_invoices.error_outdated_invoices)} outdated invoices")
     print("📁 Error details saved to 'error_invoices.json'")
 else:
     print("✅ All invoices synchronized successfully!")
@@ -333,18 +333,18 @@ For a quick retry of failed invoices, use this simple approach:
 ```python
 import json
 from invoice_synchronizer import InvoiceSynchronizer
-from invoice_synchronizer.application import ProcessSpecificInvoices
+from invoice_synchronizer.application import InvoicesProcessReport
 
 # Load failed invoices and retry
 synchronizer = InvoiceSynchronizer()
 
 with open("error_invoices.json", "r", encoding="utf-8") as f:
     data = json.load(f)
-    failed_invoices = ProcessSpecificInvoices(**data)
+    failed_invoices = InvoicesProcessReport(**data)
 
 # Process only the failed invoices
 result = synchronizer.update_specific_invoices(failed_invoices)
-print(f"Remaining errors: {len(result.missing_invoices + result.outdated_invoices)}")
+print(f"Remaining errors: {len(result.error_missing_invoices + result.error_outdated_invoices)}")
 ```
 
 ### Error File Structure
@@ -352,7 +352,7 @@ print(f"Remaining errors: {len(result.missing_invoices + result.outdated_invoice
 The error file contains:
 ```json
 {
-    "missing_invoices": [
+    "error_missing_invoices": [
         {
             "client": {...},
             "invoice_id": {...},
@@ -362,7 +362,7 @@ The error file contains:
             "status": "PAID"
         }
     ],
-    "outdated_invoices": [...],
+    "error_outdated_invoices": [...],
     "finished_invoices": [...]
 }
 ```
