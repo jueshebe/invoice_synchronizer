@@ -59,13 +59,13 @@ poetry shell
 
 Create a `.env` file in the project root with the following variables:
 
-#### PirPOS Variables
+#### Loggro Variables
 ```bash
-# PirPOS credentials
+# Loggro credentials
 PIRPOS_USERNAME=your_email@example.com
 PIRPOS_PASSWORD=your_pirpos_password
 
-# PirPOS configuration
+# Loggro configuration
 PIRPOS_BATCH_SIZE=200
 PIRPOS_TIMEOUT=30
 ```
@@ -108,25 +108,25 @@ Create this file in the project root and configure mappings between the System, 
 {
     "payments": [
         {
-            "pirpos_id": "Efectivo",
+            "loggro_id": "Efectivo",
             "system_id": "Efectivo",
             "siigo_id": 3025
         },
         {
-            "pirpos_id": "Tarjeta débito",
+            "loggro_id": "Tarjeta débito",
             "system_id": "Transferencia bancaria",
             "siigo_id": 3027
         }
     ],
     "taxes": [
         {
-            "pirpos_id": "IVA19",
+            "loggro_id": "IVA19",
             "system_id": "IVA 19%",
             "siigo_id": "7066",
             "value": 0.19
         },
         {
-            "pirpos_id": "I CONSUMO",
+            "loggro_id": "I CONSUMO",
             "system_id": "I CONSUMO",
             "siigo_id": "7081",
             "value": 0.08
@@ -135,19 +135,19 @@ Create this file in the project root and configure mappings between the System, 
     "prefixes": [
         {
             "system_id": "LL",
-            "pirpos_id": "LL",
+            "loggro_id": "LL",
             "siigo_id": 13136,
             "siigo_code": 1
         }
     ],
     "invoice_status": [
         {
-            "pirpos_id": "Pagada",
+            "loggro_id": "Pagada",
             "system_id": "PAID",
             "siigo_id": 1
         },
         {
-            "pirpos_id": "Anulada",
+            "loggro_id": "Anulada",
             "system_id": "ANULATED",
             "siigo_id": 3
         }
@@ -170,7 +170,7 @@ Create this file in the project root and configure the default client for invoic
 {
     "name": "Consumidor Final",
     "last_name": null,
-    "email": "no-reply@pirpos.com",
+    "email": "no-reply@loggro.com",
     "phone": "3102830171",
     "address": "calle 35#27-16",
     "document_number": 222222222222,
@@ -193,7 +193,7 @@ Create this file in the project root and configure the default client for invoic
 
 ```python
 from datetime import datetime
-from invoice_synchronizer.presentation.lib.synchronizer import InvoiceSynchronizer
+from invoice_synchronizer import InvoiceSynchronizer
 
 # Create synchronizer instance
 synchronizer = InvoiceSynchronizer()
@@ -205,15 +205,15 @@ synchronizer = InvoiceSynchronizer()
 # Synchronize all data
 def sync_everything():
     # 1. Synchronize products
-    synchronizer.updater.update_products()
+    synchronizer.update_products()
     
     # 2. Synchronize clients
-    synchronizer.updater.update_clients()
+    synchronizer.update_clients()
     
     # 3. Synchronize invoices for a specific range
     start_date = datetime(2026, 1, 1)
     end_date = datetime(2026, 1, 31)
-    synchronizer.updater.update_invoices(start_date, end_date)
+    synchronizer.update_invoices(start_date, end_date, iterations=5)
 
 # Execute synchronization
 sync_everything()
@@ -229,21 +229,21 @@ start_date = datetime(2026, 1, 15)  # January 15, 2026
 end_date = datetime(2026, 1, 20)    # January 20, 2026
 
 # Synchronize only invoices from the range
-synchronizer.updater.update_invoices(start_date, end_date)
+synchronizer.update_invoices(start_date, end_date, iterations=3)
 ```
 
 ### Specific Synchronization
 
 ```python
 # Products only
-synchronizer.updater.update_products()
+synchronizer.update_products()
 
 # Clients only
-synchronizer.updater.update_clients()
+synchronizer.update_clients()
 
 # Invoices from a specific day only
 specific_date = datetime(2026, 1, 25)
-synchronizer.updater.update_invoices(specific_date, specific_date)
+synchronizer.update_invoices(specific_date, specific_date, iterations=1)
 ```
 
 ### Complete Example
@@ -253,7 +253,7 @@ synchronizer.updater.update_invoices(specific_date, specific_date)
 """Example usage of the invoice synchronizer."""
 
 from datetime import datetime, timedelta
-from invoice_synchronizer.presentation.lib.synchronizer import InvoiceSynchronizer
+from invoice_synchronizer import InvoiceSynchronizer
 
 def main():
     """Main synchronization function."""
@@ -264,17 +264,17 @@ def main():
         
         # Synchronize products and clients
         print("Synchronizing products...")
-        synchronizer.updater.update_products()
+        synchronizer.update_products()
         
         print("Synchronizing clients...")
-        synchronizer.updater.update_clients()
+        synchronizer.update_clients()
         
         # Synchronize invoices from the last week
         end_date = datetime.now()
         start_date = end_date - timedelta(days=7)
         
         print(f"Synchronizing invoices from {start_date.date()} to {end_date.date()}")
-        synchronizer.updater.update_invoices(start_date, end_date)
+        synchronizer.update_invoices(start_date, end_date, iterations=5)
         
         print("✅ Synchronization completed successfully")
         
@@ -296,6 +296,76 @@ Logs include:
 - Progress information
 - Errors and exceptions
 - Synchronization details
+
+## 🚨 Error Handling
+
+### Automatic Error Files
+
+When synchronization encounters errors, the system can generate error files:
+
+```python
+# Example of full synchronization with error handling
+from datetime import datetime
+
+start_date = datetime(2026, 1, 1)
+end_date = datetime(2026, 1, 31)
+
+# This returns a InvoicesProcessReport object with failed invoices
+error_invoices = synchronizer.update_invoices(start_date, end_date, iterations=5)
+
+# Save errors to file for later processing
+if error_invoices.error_missing_invoices or error_invoices.error_outdated_invoices:
+    print("There were errors updating the following invoices:")
+    with open("error_invoices.json", "w", encoding="utf-8") as error_file:
+        error_file.write(error_invoices.model_dump_json(indent=4))
+    
+    print(f"❌ {len(error_invoices.error_missing_invoices)} missing invoices")
+    print(f"❌ {len(error_invoices.error_outdated_invoices)} outdated invoices")
+    print("📁 Error details saved to 'error_invoices.json'")
+else:
+    print("✅ All invoices synchronized successfully!")
+```
+
+### Simple Error Recovery
+
+For a quick retry of failed invoices, use this simple approach:
+
+```python
+import json
+from invoice_synchronizer import InvoiceSynchronizer
+from invoice_synchronizer.application import InvoicesProcessReport
+
+# Load failed invoices and retry
+synchronizer = InvoiceSynchronizer()
+
+with open("error_invoices.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+    failed_invoices = InvoicesProcessReport(**data)
+
+# Process only the failed invoices
+result = synchronizer.update_specific_invoices(failed_invoices)
+print(f"Remaining errors: {len(result.error_missing_invoices + result.error_outdated_invoices)}")
+```
+
+### Error File Structure
+
+The error file contains:
+```json
+{
+    "error_missing_invoices": [
+        {
+            "client": {...},
+            "invoice_id": {...},
+            "payments": [...],
+            "order_items": [...],
+            "total": 150000.0,
+            "status": "PAID"
+        }
+    ],
+    "error_outdated_invoices": [...],
+    "finished_invoices": [...]
+}
+```
 
 ## 🛠️ Development Commands
 

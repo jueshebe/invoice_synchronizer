@@ -5,6 +5,6 @@
     "credit_note_id": 13143,
     "seller_id": 709,
     "max_requests_per_minute": 90,
-    "token_max_hours_time_alive": 10,
+    "token_max_hours_time_alive": 2,
     "credit_note_forward_days": 60
 }

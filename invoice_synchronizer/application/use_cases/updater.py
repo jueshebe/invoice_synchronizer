@@ -1,15 +1,26 @@
 """Updater Class."""
 
+from typing import List, Optional
 from logging import Logger
 from datetime import datetime
 import json
-from invoice_synchronizer.domain import PlatformConnector, User
+from pydantic import BaseModel
+from tqdm import tqdm
+from invoice_synchronizer.domain import PlatformConnector, User, Invoice
 from invoice_synchronizer.application.use_cases.utils import (
     get_missing_outdated_clients,
     save_error,
     get_missing_outdated_products,
     get_missing_outdated_invoices,
 )
+
+
+class InvoicesProcessReport(BaseModel):
+    """Process specific invoices model."""
+
+    error_missing_invoices: List[Invoice] = []
+    error_outdated_invoices: List[Invoice] = []
+    finished_invoices: List[Invoice] = []
 
 
 class Updater:
@@ -46,26 +57,24 @@ class Updater:
             self.logger.info("All Clients already updated.")
             return
 
-        for counter, client in enumerate(missing_clients):
+        for client in tqdm(missing_clients, desc="Creating clients"):
             try:
                 self.target_client.create_client(client)
-                self.logger.info("%s/%s clients created", counter + 1, len(missing_clients))
             except Exception as error:
                 self.logger.error(
                     "Error with client %s check clients_errors.json", client.document_number
                 )
                 error_data = {
                     "type_op": "Creating",
-                    "client": json.loads(client.json()),
+                    "client": json.loads(client.model_dump_json()),
                     "error": str(error),
                     "error_date": str(datetime.now()),
                 }
                 save_error(error_data, "clients_errors.json")
 
-        for counter, outdated_client in enumerate(outdated_clients):
+        for outdated_client in tqdm(outdated_clients, desc="Updating clients"):
             try:
                 self.target_client.update_client(outdated_client)
-                self.logger.info("%s/%s clients updated", counter + 1, len(outdated_clients))
             except Exception as error:
                 self.logger.error(
                     "Error with client %s check clients_errors.json",
@@ -73,7 +82,7 @@ class Updater:
                 )
                 error_data = {
                     "type_op": "Updating",
-                    "client": json.loads(outdated_client.json()),
+                    "client": json.loads(outdated_client.model_dump_json()),
                     "error": str(error),
                 }
                 save_error(error_data, "clients_error.json")
@@ -94,24 +103,22 @@ class Updater:
             self.logger.info("All Products already updated.")
             return
 
-        for counter, product in enumerate(missing_products):
+        for product in tqdm(missing_products, desc="Creating products"):
             try:
                 self.target_client.create_product(product)
-                self.logger.info("%s/%s products created", counter + 1, len(missing_products))
             except Exception as error:
                 self.logger.error("Error with product %s check products_error.json", product.name)
                 error_data = {
                     "type_op": "Creating",
-                    "product": json.loads(product.json()),
+                    "product": json.loads(product.model_dump_json()),
                     "error": str(error),
                     "error_date": str(datetime.now()),
                 }
                 save_error(error_data, "products_error.json")
 
-        for counter, outdated_product in enumerate(outdated_products):
+        for outdated_product in tqdm(outdated_products, desc="Updating products"):
             try:
                 self.target_client.update_product(outdated_product)
-                self.logger.info("%s/%s products updated", counter + 1, len(outdated_products))
 
             except Exception as error:
                 self.logger.error(
@@ -124,33 +131,46 @@ class Updater:
                 }
                 save_error(error_data, "products_error.json")
 
-    def update_invoices(self, init_date: datetime, end_day: datetime) -> None:
+    def update_invoices(
+        self,
+        init_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        process_specific_invoices: Optional[InvoicesProcessReport] = None,
+    ) -> InvoicesProcessReport:
         """Update and create invoices on target from source data."""
         self.logger.info("Updating invoices")
-        ref_invoices = self.source_client.get_invoices(init_date, end_day)
-        unchecked_invoices = self.target_client.get_invoices(init_date, end_day)
 
-        # get missing and ourdated clients
-        (
-            missing_invoices,
-            outdated_invoices,
-            _,
-        ) = get_missing_outdated_invoices(ref_invoices, unchecked_invoices)
+        if process_specific_invoices:
+            missing_invoices = process_specific_invoices.error_missing_invoices
+            outdated_invoices = process_specific_invoices.error_outdated_invoices
+        elif init_date and end_date:
+            self.logger.info("Fetching invoices from %s to %s", init_date, end_date)
+            self.logger.info("Getting invoices from source platform")
+            ref_invoices = self.source_client.get_invoices(init_date, end_date)
+            self.logger.info("Getting invoices from target platform")
+            unchecked_invoices = self.target_client.get_invoices(init_date, end_date)
+
+            # get missing and outdated clients
+            (
+                missing_invoices,
+                outdated_invoices,
+                _,
+            ) = get_missing_outdated_invoices(ref_invoices, unchecked_invoices)
+        else:
+            raise ValueError("Must provide init_date and end_date or specific invoices to process")
+
         self.logger.info(
-            "Found %s missing and %s outdated invoices",
+            "Processing %s missing and %s outdated invoices",
             len(missing_invoices),
             len(outdated_invoices),
         )
 
-        for counter, invoice in enumerate(outdated_invoices):
+        finished_invoices : List[Invoice] = []
+        error_outdated_invoices: List[Invoice] = []
+        for invoice in tqdm(outdated_invoices, desc="Updating invoices"):
             try:
                 self.target_client.update_invoice(invoice)
-                self.logger.info(
-                    "%s | %s/%s invoices updated",
-                    invoice.invoice_id.number,
-                    counter + 1,
-                    len(outdated_invoices),
-                )
+                finished_invoices.append(invoice)
             except Exception as error:
                 self.logger.error(
                     "Error with invoice %s%s check invoices_error.json",
@@ -159,20 +179,17 @@ class Updater:
                 )
                 error_data = {
                     "type_op": "Updating",
-                    "invoice": json.loads(invoice.json()),
+                    "invoice": json.loads(invoice.model_dump_json()),
                     "error": str(error),
                 }
                 save_error(error_data, "invoices_error.json")
+                error_outdated_invoices.append(invoice)
 
-        for counter, invoice in enumerate(missing_invoices):
+        error_missing_invoices: List[Invoice] = []
+        for invoice in tqdm(missing_invoices, desc="Creating invoices"):
             try:
                 self.target_client.create_invoice(invoice)
-                self.logger.info(
-                    "%s | %s/%s invoices created",
-                    invoice.invoice_id.number,
-                    counter + 1,
-                    len(missing_invoices),
-                )
+                finished_invoices.append(invoice)
             except Exception as error:
                 self.logger.warning(
                     "Error with invoice %s%s\nerror: %s",
@@ -182,7 +199,34 @@ class Updater:
                 )
                 error_data = {
                     "type_op": "Creating",
-                    "invoice": json.loads(invoice.json()),
+                    "invoice": json.loads(invoice.model_dump_json()),
                     "error": str(error),
                 }
                 save_error(error_data, "invoices_error.json")
+                error_missing_invoices.append(invoice)
+
+        all_finished_invoices = finished_invoices
+        if process_specific_invoices:
+            all_finished_invoices = process_specific_invoices.finished_invoices
+
+        return InvoicesProcessReport(
+            error_missing_invoices=error_missing_invoices,
+            error_outdated_invoices=error_outdated_invoices,
+            finished_invoices=all_finished_invoices,
+        )
+
+    def update_invoices_iterations(
+        self, init_date: datetime, end_date: datetime, iterations: int = 0
+    ) -> InvoicesProcessReport:
+        """Update invoices making iterations."""
+        error_invoices = None
+        for _ in range(iterations + 1):
+            error_invoices = self.update_invoices(init_date, end_date, error_invoices)
+
+            if not error_invoices.error_missing_invoices and not error_invoices.error_outdated_invoices:
+                break
+
+        if error_invoices is None:
+            error_invoices = InvoicesProcessReport()
+        return error_invoices
+

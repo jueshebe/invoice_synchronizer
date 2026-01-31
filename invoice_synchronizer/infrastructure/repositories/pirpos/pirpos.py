@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from collections import defaultdict
 import requests  # type: ignore
+from tqdm import tqdm
 from invoice_synchronizer.domain import (
     User,
     Product,
@@ -237,7 +238,12 @@ class PirposConnector(PlatformConnector):
         raise NotImplementedError("Method not implemented yet.")
 
     def __get_invoices_by_status(
-        self, init_day: datetime, end_day: datetime, status: InvoiceStatus, clients: List[User]
+        self,
+        init_day: datetime,
+        end_day: datetime,
+        status: InvoiceStatus,
+        clients: List[User],
+        pbar: tqdm,
     ) -> List[Invoice]:
         """Get invoices from pirpos.
 
@@ -266,7 +272,6 @@ class PirposConnector(PlatformConnector):
         }
 
         # products = self.get_products()
-
         while True:
             time1 = init_day + timedelta(days=days)
             time2 = (
@@ -299,6 +304,7 @@ class PirposConnector(PlatformConnector):
             data = response.json()
 
             invoices_per_client.extend(define_pirpos_invoices(data, self.__configuration, clients))
+            pbar.update(len(data))
             if time2 >= end_day:
                 break
 
@@ -320,12 +326,14 @@ class PirposConnector(PlatformConnector):
             Pirpos invoices in a range of time
         """
         clients = self.get_clients()
-        invoices_anulated = self.__get_invoices_by_status(
-            init_day, end_day, InvoiceStatus.ANULATED, clients
-        )
-        invoices_paid = self.__get_invoices_by_status(
-            init_day, end_day, InvoiceStatus.PAID, clients
-        )
+
+        with tqdm(desc="Downloading invoices from Loggro", unit=" invoices") as pbar:
+            invoices_anulated = self.__get_invoices_by_status(
+                init_day, end_day, InvoiceStatus.ANULATED, clients, pbar
+            )
+            invoices_paid = self.__get_invoices_by_status(
+                init_day, end_day, InvoiceStatus.PAID, clients, pbar
+            )
         all_invoices = invoices_paid + invoices_anulated
         return all_invoices
 

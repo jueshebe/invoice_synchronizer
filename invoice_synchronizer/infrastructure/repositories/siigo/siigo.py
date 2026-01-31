@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timedelta
 from logging import Logger
 import requests  # type: ignore
+from tqdm import tqdm
 from invoice_synchronizer.domain import (
     User,
     Product,
@@ -41,7 +42,7 @@ class SiigoConnector(PlatformConnector):
         self.__siigo_username = siigo_config.siigo_username
         self.__siigo_access_key = siigo_config.siigo_access_key
         self.__configuration = siigo_config.system_mapping
-        self.__page_size = 500
+        self.__page_size = 200
         self.__timeout = siigo_config.timeout
         self.default_client = siigo_config.default_user
         self.retentions = siigo_config.retentions
@@ -130,7 +131,7 @@ class SiigoConnector(PlatformConnector):
 
         Returns
         -------
-          List[Client]
+          List[User]
           List with Siigo clients
         """
         url = "https://api.siigo.com/v1/customers?page={page}" f"&page_size={self.__page_size}"
@@ -278,7 +279,7 @@ class SiigoConnector(PlatformConnector):
         List[Product]
             Siigo products
         """
-        url = "https://api.siigo.com/v1/products?page_size=100"
+        url = f"https://api.siigo.com/v1/products?page_size={self.__page_size}"
         headers = {
             "content-type": "application/json; charset=UTF-8",
             "Authorization": self.__siigo_access_token,
@@ -409,7 +410,7 @@ class SiigoConnector(PlatformConnector):
         day1 = init_day.strftime("%Y-%m-%d")
         day2 = (end_day + timedelta(days=1)).strftime("%Y-%m-%d")
         url = (
-            f"https://api.siigo.com/v1/credit-notes?page_size=100&created_end={day2}"
+            f"https://api.siigo.com/v1/credit-notes?page_size={self.__page_size}&created_end={day2}"
             f"&created_start={day1}"
         )
         headers = {
@@ -478,7 +479,7 @@ class SiigoConnector(PlatformConnector):
         day1 = init_day.strftime("%Y-%m-%d")
         day2 = (end_day + timedelta(days=1)).strftime("%Y-%m-%d")
         url = (
-            f"https://api.siigo.com/v1/invoices?page_size=100&date_end={day2}" f"&date_start={day1}"
+            f"https://api.siigo.com/v1/invoices?page_size={self.__page_size}&date_end={day2}" f"&date_start={day1}"
         )
         headers = {
             "Authorization": self.__siigo_access_token,
@@ -488,41 +489,42 @@ class SiigoConnector(PlatformConnector):
 
         errors_count = 0
         invoices_by_id: Dict[str, Invoice] = {}
-        while True:
-            self._rate_limiter.wait_if_needed()
-            response = requests.request(
-                "GET",
-                url,
-                headers=headers,
-                timeout=self.__timeout,
-            )
-            if not response.ok:
-                if errors_count > 5:
+        with tqdm(desc="Downloading invoices from Siigo", unit=" invoices") as pbar:
+            while True:
+                self._rate_limiter.wait_if_needed()
+                response = requests.request(
+                    "GET",
+                    url,
+                    headers=headers,
+                    timeout=self.__timeout,
+                )
+                if not response.ok:
+                    if errors_count > 5:
+                        raise FetchDataError(f"Can't download Siigo invoices\n {response.text}")
+
+                    if response.json()["Errors"][0]["Code"] == "document_query_service":
+                        errors_count += 1
+                        continue
                     raise FetchDataError(f"Can't download Siigo invoices\n {response.text}")
 
-                if response.json()["Errors"][0]["Code"] == "document_query_service":
-                    errors_count += 1
-                    continue
-                raise FetchDataError(f"Can't download Siigo invoices\n {response.text}")
+                response_ob = response.json()
+                data = response_ob["results"]
+                pbar.update(len(data))
+                batch_invoices = define_siigo_invoice(
+                    system_parameters=self.__configuration,
+                    data=data,
+                    clients=clients,
+                )
+                invoices_by_id.update(batch_invoices)
+                self.__invoice_number_to_siigo_id.update(
+                    get_invoice_number_2_siigo_id_mapping(invoices_by_id)
+                )
 
-            response_ob = response.json()
-            data = response_ob["results"]
-
-            batch_invoices = define_siigo_invoice(
-                system_parameters=self.__configuration,
-                data=data,
-                clients=clients,
-            )
-            invoices_by_id.update(batch_invoices)
-            self.__invoice_number_to_siigo_id.update(
-                get_invoice_number_2_siigo_id_mapping(invoices_by_id)
-            )
-
-            next_link = response_ob["_links"].get("next", {"href": None})["href"]
-            if len(data) == 0 or next_link is None:
-                break
-            else:
-                url = next_link
+                next_link = response_ob["_links"].get("next", {"href": None})["href"]
+                if len(data) == 0 or next_link is None:
+                    break
+                else:
+                    url = next_link
         invoices, invoice_id_to_credit_note_id = update_invoices_with_credit_notes(
             invoices_by_id, credit_note_data, credit_note_doc_name_acentry
         )
@@ -604,10 +606,10 @@ class SiigoConnector(PlatformConnector):
                     raise UploadError(f"Can't create invoice\n {response.text}")
                 message = response.json()["Errors"][0]["Message"]
                 payment = float(message.split(" ")[-1])
-                fix_payment = payment - invoice.total 
+                fix_payment = payment - invoice.total
                 invoice.payments[0].value += round(fix_payment, 2)
                 invoice.total = round(payment, 2)
-                self.create_invoice(invoice, 1)
+                return self.create_invoice(invoice, 1)
             else:
                 raise UploadError(f"Can't create invoice\n {response.text}")
 
@@ -633,7 +635,7 @@ class SiigoConnector(PlatformConnector):
         if not response.ok:
             raise UploadError(f"Can't cancel invoice {response.text}")
 
-    def update_invoice(self, invoice: Invoice) -> None:
+    def update_invoice(self, invoice: Invoice, retry_count: int = 0) -> None:
         """Create invoice."""
         invoice_siigo_id = self.__invoice_number_to_siigo_id.get(
             f"{invoice.invoice_id.prefix}{invoice.invoice_id.number}"
@@ -670,7 +672,19 @@ class SiigoConnector(PlatformConnector):
             "PUT", url, headers=headers, data=str(payload), timeout=self.__timeout
         )
         if not response.ok:
-            raise UploadError(f"Can't create invoice\n {response.text}")
+            if (
+                response.json()["Errors"][0]["Code"] == "invalid_total_payments"
+            ):
+                if retry_count >= 1:
+                    raise UploadError(f"Can't create invoice\n {response.text}")
+                message = response.json()["Errors"][0]["Message"]
+                payment = float(message.split(" ")[-1])
+                fix_payment = payment - invoice.total
+                invoice.payments[0].value += round(fix_payment, 2)
+                invoice.total = round(payment, 2)
+                return self.update_invoice(invoice, 1)
+            else:
+                raise UploadError(f"Can't create invoice\n {response.text}")
 
         if invoice.status == InvoiceStatus.ANULATED:
             self._create_credit_note(invoice, invoice_siigo_id)
