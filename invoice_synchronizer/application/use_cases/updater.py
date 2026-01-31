@@ -21,55 +21,6 @@ class ProcessSpecificInvoices(BaseModel):
     missing_invoices: List[Invoice] = []
     outdated_invoices: List[Invoice] = []
 
-    @model_validator(mode='before')
-    @classmethod
-    def fix_taxes_values(cls, data: Any) -> Any:
-        """Fix taxes_values dict keys from string representation to TaxType objects."""
-        if isinstance(data, dict):
-            for invoice_list_name in ['missing_invoices', 'outdated_invoices']:
-                if invoice_list_name in data:
-                    for invoice in data[invoice_list_name]:
-                        # Fix taxes_values in invoice
-                        if 'taxes_values' in invoice and isinstance(invoice['taxes_values'], dict):
-                            new_taxes_values = {}
-                            for tax_str, value in invoice['taxes_values'].items():
-                                # Parse the string representation: "tax_name='I CONSUMO' tax_percentage=8.0"
-                                if isinstance(tax_str, str) and "tax_name=" in tax_str:
-                                    try:
-                                        # Extract tax_name and tax_percentage
-                                        name_part = tax_str.split("tax_name=")[1].split(" tax_percentage=")[0].strip("'")
-                                        percentage_part = float(tax_str.split("tax_percentage=")[1])
-                                        tax_obj = TaxType(tax_name=name_part, tax_percentage=percentage_part)
-                                        new_taxes_values[tax_obj] = value
-                                    except (ValueError, IndexError):
-                                        # If parsing fails, skip this entry
-                                        continue
-                                else:
-                                    # If it's already a proper key, keep it
-                                    new_taxes_values[tax_str] = value
-                            invoice['taxes_values'] = new_taxes_values
-
-                        # Fix taxes_values in order_items products
-                        if 'order_items' in invoice:
-                            for order_item in invoice['order_items']:
-                                if 'product' in order_item and 'taxes_values' in order_item['product']:
-                                    product = order_item['product']
-                                    if isinstance(product['taxes_values'], dict):
-                                        new_taxes_values = {}
-                                        for tax_str, value in product['taxes_values'].items():
-                                            if isinstance(tax_str, str) and "tax_name=" in tax_str:
-                                                try:
-                                                    name_part = tax_str.split("tax_name=")[1].split(" tax_percentage=")[0].strip("'")
-                                                    percentage_part = float(tax_str.split("tax_percentage=")[1])
-                                                    tax_obj = TaxType(tax_name=name_part, tax_percentage=percentage_part)
-                                                    new_taxes_values[tax_obj] = value
-                                                except (ValueError, IndexError):
-                                                    continue
-                                            else:
-                                                new_taxes_values[tax_str] = value
-                                        product['taxes_values'] = new_taxes_values
-        return data
-
 
 class Updater:
     """Class to update data from pirpos to siigo."""
