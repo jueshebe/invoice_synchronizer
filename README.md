@@ -193,7 +193,7 @@ Create this file in the project root and configure the default client for invoic
 
 ```python
 from datetime import datetime
-from invoice_synchronizer.presentation.lib.synchronizer import InvoiceSynchronizer
+from invoice_synchronizer import InvoiceSynchronizer
 
 # Create synchronizer instance
 synchronizer = InvoiceSynchronizer()
@@ -253,7 +253,7 @@ synchronizer.update_invoices(specific_date, specific_date, iterations=1)
 """Example usage of the invoice synchronizer."""
 
 from datetime import datetime, timedelta
-from invoice_synchronizer.presentation.lib.synchronizer import InvoiceSynchronizer
+from invoice_synchronizer import InvoiceSynchronizer
 
 def main():
     """Main synchronization function."""
@@ -332,7 +332,7 @@ For a quick retry of failed invoices, use this simple approach:
 
 ```python
 import json
-from invoice_synchronizer.presentation.lib.synchronizer import InvoiceSynchronizer
+from invoice_synchronizer import InvoiceSynchronizer
 from invoice_synchronizer.application import ProcessSpecificInvoices
 
 # Load failed invoices and retry
@@ -362,7 +362,8 @@ The error file contains:
             "status": "PAID"
         }
     ],
-    "outdated_invoices": [...]
+    "outdated_invoices": [...],
+    "finished_invoices": [...]
 }
 ```
 

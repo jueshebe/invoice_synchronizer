@@ -15,11 +15,12 @@ from invoice_synchronizer.application.use_cases.utils import (
 )
 
 
-class ProcessSpecificInvoices(BaseModel):
+class InvoicesProcessReport(BaseModel):
     """Process specific invoices model."""
 
-    missing_invoices: List[Invoice] = []
-    outdated_invoices: List[Invoice] = []
+    error_missing_invoices: List[Invoice] = []
+    error_outdated_invoices: List[Invoice] = []
+    finished_invoices: List[Invoice] = []
 
 
 class Updater:
@@ -134,14 +135,14 @@ class Updater:
         self,
         init_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        process_specific_invoices: Optional[ProcessSpecificInvoices] = None,
-    ) -> ProcessSpecificInvoices:
+        process_specific_invoices: Optional[InvoicesProcessReport] = None,
+    ) -> InvoicesProcessReport:
         """Update and create invoices on target from source data."""
         self.logger.info("Updating invoices")
 
         if process_specific_invoices:
-            missing_invoices = process_specific_invoices.missing_invoices
-            outdated_invoices = process_specific_invoices.outdated_invoices
+            missing_invoices = process_specific_invoices.error_missing_invoices
+            outdated_invoices = process_specific_invoices.error_outdated_invoices
         elif init_date and end_date:
             self.logger.info("Fetching invoices from %s to %s", init_date, end_date)
             self.logger.info("Getting invoices from source platform")
@@ -164,10 +165,12 @@ class Updater:
             len(outdated_invoices),
         )
 
+        finished_invoices : List[Invoice] = []
         error_outdated_invoices: List[Invoice] = []
         for invoice in tqdm(outdated_invoices, desc="Updating invoices"):
             try:
                 self.target_client.update_invoice(invoice)
+                finished_invoices.append(invoice)
             except Exception as error:
                 self.logger.error(
                     "Error with invoice %s%s check invoices_error.json",
@@ -186,6 +189,7 @@ class Updater:
         for invoice in tqdm(missing_invoices, desc="Creating invoices"):
             try:
                 self.target_client.create_invoice(invoice)
+                finished_invoices.append(invoice)
             except Exception as error:
                 self.logger.warning(
                     "Error with invoice %s%s\nerror: %s",
@@ -201,23 +205,28 @@ class Updater:
                 save_error(error_data, "invoices_error.json")
                 error_missing_invoices.append(invoice)
 
-        return ProcessSpecificInvoices(
-            missing_invoices=error_missing_invoices,
-            outdated_invoices=error_outdated_invoices,
+        all_finished_invoices = finished_invoices
+        if process_specific_invoices:
+            all_finished_invoices = process_specific_invoices.finished_invoices
+
+        return InvoicesProcessReport(
+            error_missing_invoices=error_missing_invoices,
+            error_outdated_invoices=error_outdated_invoices,
+            finished_invoices=all_finished_invoices,
         )
 
     def update_invoices_iterations(
         self, init_date: datetime, end_date: datetime, iterations: int = 0
-    ) -> ProcessSpecificInvoices:
+    ) -> InvoicesProcessReport:
         """Update invoices making iterations."""
         error_invoices = None
         for _ in range(iterations + 1):
             error_invoices = self.update_invoices(init_date, end_date, error_invoices)
 
-            if not error_invoices.missing_invoices and not error_invoices.outdated_invoices:
+            if not error_invoices.error_missing_invoices and not error_invoices.error_outdated_invoices:
                 break
 
         if error_invoices is None:
-            error_invoices = ProcessSpecificInvoices()
+            error_invoices = InvoicesProcessReport()
         return error_invoices
 

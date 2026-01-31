@@ -5,7 +5,7 @@ import sys
 import logging
 from datetime import datetime
 from invoice_synchronizer.infrastructure import SystemConfig, PirposConnector, SiigoConnector
-from invoice_synchronizer.application import Updater, ProcessSpecificInvoices
+from invoice_synchronizer.application import Updater, InvoicesProcessReport
 
 
 class InvoiceSynchronizer:
@@ -123,7 +123,7 @@ class InvoiceSynchronizer:
         """
         self.updater.update_clients()
 
-    def update_invoices(self, init_date: datetime, end_date: datetime, iterations: int) -> ProcessSpecificInvoices:
+    def update_invoices(self, init_date: datetime, end_date: datetime, iterations: int) -> InvoicesProcessReport:
         """Update invoices from Loggro to Siigo within a date range.
         
         Synchronizes invoices between Loggro and Siigo platforms for the specified date range.
@@ -136,9 +136,10 @@ class InvoiceSynchronizer:
                             process smaller batches, useful for large date ranges or rate limiting.
         
         Returns:
-            ProcessSpecificInvoices: Object containing lists of invoices that failed to sync:
-                - missing_invoices: Invoices present in Loggro but not in Siigo
-                - outdated_invoices: Invoices that exist in both systems but differ
+            InvoicesProcessReport: Object containing lists of invoices that failed to sync:
+                - error_missing_invoices: Invoices present in Loggro but not in Siigo
+                - error_outdated_invoices: Invoices that exist in both systems but differ
+                - finished_invoices: Invoices successfully synchronized
         
         Example:
             >>> from datetime import datetime
@@ -148,12 +149,12 @@ class InvoiceSynchronizer:
             ...     end_date=datetime(2026, 1, 31),
             ...     iterations=5
             ... )
-            >>> print(f"Failed invoices: {len(result.missing_invoices)}")
+            >>> print(f"Failed invoices: {len(result.error_missing_invoices)}")
         """
-        error_invoices = self.updater.update_invoices_iterations(init_date, end_date, iterations)
-        return error_invoices
+        process_report = self.updater.update_invoices_iterations(init_date, end_date, iterations)
+        return process_report
 
-    def update_specific_invoices(self, process_specific_invoices: ProcessSpecificInvoices) -> ProcessSpecificInvoices:
+    def update_specific_invoices(self, process_specific_invoices: InvoicesProcessReport) -> InvoicesProcessReport:
         """Process specific invoices that previously failed synchronization.
         
         Takes a ProcessSpecificInvoices object containing missing or outdated invoices
@@ -161,12 +162,12 @@ class InvoiceSynchronizer:
         invoices that failed in a previous synchronization run.
         
         Args:
-            process_specific_invoices (ProcessSpecificInvoices): Object containing:
-                - missing_invoices: List of invoices to create in Siigo
-                - outdated_invoices: List of invoices to update in Siigo
+            process_specific_invoices (InvoicesProcessReport): Object containing:
+                - error_missing_invoices: List of invoices to create in Siigo
+                - error_outdated_invoices: List of invoices to update in Siigo
         
         Returns:
-            ProcessSpecificInvoices: Object with any invoices that still failed to sync
+            InvoicesProcessReport: Object with any invoices that still failed to sync
             after this retry attempt. Empty lists indicate complete success.
         
         Example:
@@ -183,8 +184,8 @@ class InvoiceSynchronizer:
             >>> if not result.missing_invoices and not result.outdated_invoices:
             ...     print("All invoices synchronized successfully!")
         """
-        error_invoices = self.updater.update_invoices(process_specific_invoices=process_specific_invoices)
-        return error_invoices
+        process_report = self.updater.update_invoices(process_specific_invoices=process_specific_invoices)
+        return process_report
 
 
 if __name__ == "__main__":
