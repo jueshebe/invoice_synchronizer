@@ -42,7 +42,7 @@ class SiigoConnector(PlatformConnector):
         self.__siigo_username = siigo_config.siigo_username
         self.__siigo_access_key = siigo_config.siigo_access_key
         self.__configuration = siigo_config.system_mapping
-        self.__page_size = 500
+        self.__page_size = 200
         self.__timeout = siigo_config.timeout
         self.default_client = siigo_config.default_user
         self.retentions = siigo_config.retentions
@@ -131,7 +131,7 @@ class SiigoConnector(PlatformConnector):
 
         Returns
         -------
-          List[Client]
+          List[User]
           List with Siigo clients
         """
         url = "https://api.siigo.com/v1/customers?page={page}" f"&page_size={self.__page_size}"
@@ -279,7 +279,7 @@ class SiigoConnector(PlatformConnector):
         List[Product]
             Siigo products
         """
-        url = "https://api.siigo.com/v1/products?page_size=100"
+        url = f"https://api.siigo.com/v1/products?page_size={self.__page_size}"
         headers = {
             "content-type": "application/json; charset=UTF-8",
             "Authorization": self.__siigo_access_token,
@@ -410,7 +410,7 @@ class SiigoConnector(PlatformConnector):
         day1 = init_day.strftime("%Y-%m-%d")
         day2 = (end_day + timedelta(days=1)).strftime("%Y-%m-%d")
         url = (
-            f"https://api.siigo.com/v1/credit-notes?page_size=100&created_end={day2}"
+            f"https://api.siigo.com/v1/credit-notes?page_size={self.__page_size}&created_end={day2}"
             f"&created_start={day1}"
         )
         headers = {
@@ -479,7 +479,7 @@ class SiigoConnector(PlatformConnector):
         day1 = init_day.strftime("%Y-%m-%d")
         day2 = (end_day + timedelta(days=1)).strftime("%Y-%m-%d")
         url = (
-            f"https://api.siigo.com/v1/invoices?page_size=500&date_end={day2}" f"&date_start={day1}"
+            f"https://api.siigo.com/v1/invoices?page_size={self.__page_size}&date_end={day2}" f"&date_start={day1}"
         )
         headers = {
             "Authorization": self.__siigo_access_token,
