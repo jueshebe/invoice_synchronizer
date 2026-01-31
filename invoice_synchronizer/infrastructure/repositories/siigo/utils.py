@@ -322,7 +322,6 @@ def invoice_to_siigo_payload(
             "quantity": order.quantity,
             "price": round(order.product.base, 6),
             "discount": 0,
-
             "taxes": [
                 {
                     "id": find_mapping(system_parameters.taxes, "system_id", tax.tax_name)[
@@ -334,7 +333,7 @@ def invoice_to_siigo_payload(
         }
         items.append(item)
 
-    payments = []
+    payments = [] 
     for payment in invoice.payments:
         product_payment = {
             "id": find_mapping(system_parameters.payments, "system_id", payment.payment_type)[

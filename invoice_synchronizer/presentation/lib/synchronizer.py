@@ -72,16 +72,7 @@ if __name__ == "__main__":
 
     # synchronizer.updater.update_products()
     # synchronizer.updater.update_clients()
-    init_date_test = datetime(2026, 1, 1)
-    end_date_test = datetime(2026, 1, 31)
-    # error_invoices = synchronizer.update_invoices(init_date_test, end_date_test, iterations=5)
-    # if error_invoices.missing_invoices or error_invoices.outdated_invoices:
-    #     print("There were errors updating the following invoices:")
-    #     with open("error_invoices.json", "w", encoding="utf-8") as error_file:
-    #         error_file.write(error_invoices.model_dump_json(indent=4))
-
-    with open("error_invoices.json", "r", encoding="utf-8") as error_file:
-        data = json.loads(error_file.read())
-        error_invoices_data = ProcessSpecificInvoices(**data)
-    error_invoices_test = synchronizer.update_specific_invoices(error_invoices_data)
+    init_date = datetime(2026, 1, 20)
+    end_date = datetime(2026, 1, 20)
+    synchronizer.updater.update_invoices(init_date, end_date)
     print("Finished")
