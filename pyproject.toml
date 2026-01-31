@@ -1,9 +1,24 @@
 [tool.poetry]
 name = "invoice_synchronizer"
 version = "3.0.0"
-description = "Invoice synchronization library"
-authors = ["JulianEstebanHerrera <julianesteban.herrera@mercadolibre.com.co>"]
+description = "Invoice synchronization library between Loggro and Siigo platforms"
+authors = ["JulianEstebanHerrera"]
 readme = "README.md"
+license = "MIT"
+homepage = "https://github.com/jueshebe/invoice_synchronizer"
+repository = "https://github.com/jueshebe/invoice_synchronizer"
+documentation = "https://github.com/jueshebe/invoice_synchronizer/blob/main/README.md"
+keywords = ["invoice", "synchronization", "Loggro", "siigo", "accounting"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Office/Business :: Financial :: Accounting",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 packages = [{ include = "invoice_synchronizer" }]
 
 [tool.poetry.dependencies]

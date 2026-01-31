@@ -1,12 +1,12 @@
 """Updater Class."""
 
-from typing import List, Optional, Any
+from typing import List, Optional
 from logging import Logger
 from datetime import datetime
 import json
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 from tqdm import tqdm
-from invoice_synchronizer.domain import PlatformConnector, User, Invoice, TaxType
+from invoice_synchronizer.domain import PlatformConnector, User, Invoice
 from invoice_synchronizer.application.use_cases.utils import (
     get_missing_outdated_clients,
     save_error,
@@ -56,10 +56,9 @@ class Updater:
             self.logger.info("All Clients already updated.")
             return
 
-        for counter, client in enumerate(tqdm(missing_clients, desc="Creating clients")):
+        for client in tqdm(missing_clients, desc="Creating clients"):
             try:
                 self.target_client.create_client(client)
-                self.logger.info("%s/%s clients created", counter + 1, len(missing_clients))
             except Exception as error:
                 self.logger.error(
                     "Error with client %s check clients_errors.json", client.document_number
@@ -72,10 +71,9 @@ class Updater:
                 }
                 save_error(error_data, "clients_errors.json")
 
-        for counter, outdated_client in enumerate(tqdm(outdated_clients, desc="Updating clients")):
+        for outdated_client in tqdm(outdated_clients, desc="Updating clients"):
             try:
                 self.target_client.update_client(outdated_client)
-                self.logger.info("%s/%s clients updated", counter + 1, len(outdated_clients))
             except Exception as error:
                 self.logger.error(
                     "Error with client %s check clients_errors.json",
@@ -104,10 +102,9 @@ class Updater:
             self.logger.info("All Products already updated.")
             return
 
-        for counter, product in enumerate(missing_products):
+        for product in tqdm(missing_products, desc="Creating products"):
             try:
                 self.target_client.create_product(product)
-                self.logger.info("%s/%s products created", counter + 1, len(missing_products))
             except Exception as error:
                 self.logger.error("Error with product %s check products_error.json", product.name)
                 error_data = {
@@ -118,10 +115,9 @@ class Updater:
                 }
                 save_error(error_data, "products_error.json")
 
-        for counter, outdated_product in enumerate(outdated_products):
+        for outdated_product in tqdm(outdated_products, desc="Updating products"):
             try:
                 self.target_client.update_product(outdated_product)
-                self.logger.info("%s/%s products updated", counter + 1, len(outdated_products))
 
             except Exception as error:
                 self.logger.error(
@@ -169,15 +165,9 @@ class Updater:
         )
 
         error_outdated_invoices: List[Invoice] = []
-        for counter, invoice in enumerate(outdated_invoices):
+        for invoice in tqdm(outdated_invoices, desc="Updating invoices"):
             try:
                 self.target_client.update_invoice(invoice)
-                self.logger.info(
-                    "%s | %s/%s invoices updated",
-                    invoice.invoice_id.number,
-                    counter + 1,
-                    len(outdated_invoices),
-                )
             except Exception as error:
                 self.logger.error(
                     "Error with invoice %s%s check invoices_error.json",
@@ -193,15 +183,9 @@ class Updater:
                 error_outdated_invoices.append(invoice)
 
         error_missing_invoices: List[Invoice] = []
-        for counter, invoice in enumerate(missing_invoices):
+        for invoice in tqdm(missing_invoices, desc="Creating invoices"):
             try:
                 self.target_client.create_invoice(invoice)
-                self.logger.info(
-                    "%s | %s/%s invoices created",
-                    invoice.invoice_id.number,
-                    counter + 1,
-                    len(missing_invoices),
-                )
             except Exception as error:
                 self.logger.warning(
                     "Error with invoice %s%s\nerror: %s",
