@@ -21,6 +21,7 @@ class InvoicesProcessReport(BaseModel):
     error_missing_invoices: List[Invoice] = []
     error_outdated_invoices: List[Invoice] = []
     finished_invoices: List[Invoice] = []
+    ref_invoices: List[Invoice] = []
 
 
 class Updater:
@@ -143,6 +144,7 @@ class Updater:
         if process_specific_invoices:
             missing_invoices = process_specific_invoices.error_missing_invoices
             outdated_invoices = process_specific_invoices.error_outdated_invoices
+            ref_invoices = process_specific_invoices.ref_invoices
         elif init_date and end_date:
             self.logger.info("Fetching invoices from %s to %s", init_date, end_date)
             self.logger.info("Getting invoices from source platform")
@@ -213,6 +215,7 @@ class Updater:
             error_missing_invoices=error_missing_invoices,
             error_outdated_invoices=error_outdated_invoices,
             finished_invoices=all_finished_invoices,
+            ref_invoices=ref_invoices
         )
 
     def update_invoices_iterations(

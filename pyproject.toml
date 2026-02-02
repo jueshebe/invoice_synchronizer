@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "invoice_synchronizer"
-version = "3.1.0.dev4"
+version = "3.1.0.dev5"
 description = "Invoice synchronization library between Loggro and Siigo platforms"
 authors = ["JulianEstebanHerrera"]
 readme = "README.md"
