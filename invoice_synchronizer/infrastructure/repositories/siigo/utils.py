@@ -285,9 +285,10 @@ def update_invoices_with_credit_notes(
     invoices: Dict[str, Invoice],
     credit_note_data: List[Dict[str, Any]],
     credit_note_doc_name_acentry: Dict[str, str],
-) -> Tuple[List[Invoice], Dict[str, str]]:
+) -> Tuple[List[Invoice], Dict[str, str], Dict[InvoiceId, str]]:
     """Update invoices with credit note information."""
     invoice_id_to_credit_acentry_id: Dict[str, str] = {}
+    domain_id_to_credit_note_name: Dict[InvoiceId, str] = {}
     for credit_note in credit_note_data:
         invoice_id = credit_note["invoice"]["id"]
         credit_note_date = datetime.strptime(credit_note["date"], "%Y-%m-%d")
@@ -299,7 +300,8 @@ def update_invoices_with_credit_notes(
         invoice_id_to_credit_acentry_id[invoice_id] = credit_note_doc_name_acentry[
             credit_note["name"]
         ]
-    return list(invoices.values()), invoice_id_to_credit_acentry_id
+        domain_id_to_credit_note_name[invoice.invoice_id] = credit_note["name"]
+    return list(invoices.values()), invoice_id_to_credit_acentry_id, domain_id_to_credit_note_name
 
 
 def invoice_to_siigo_payload(

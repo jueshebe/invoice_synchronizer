@@ -19,6 +19,8 @@ class Payment(BaseModel):
 class InvoiceId(BaseModel):
     """Invoice identifier."""
 
+    model_config = {"frozen": True}
+
     prefix: str
     number: int
 
