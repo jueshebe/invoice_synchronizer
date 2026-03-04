@@ -18,3 +18,5 @@ poetry.lock
 # PyPI
 .pypirc
 invoices_error.json
+notebooks/
+.ipynb_checkpoints/

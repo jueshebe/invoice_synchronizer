@@ -1,12 +1,13 @@
 """Updater Class."""
 
-from typing import List, Optional
+from typing import List, Optional, Union
+from enum import Enum
 from logging import Logger
 from datetime import datetime
 import json
 from pydantic import BaseModel
 from tqdm import tqdm
-from invoice_synchronizer.domain import PlatformConnector, User, Invoice
+from invoice_synchronizer.domain import PlatformConnector, User, Invoice, Product
 from invoice_synchronizer.application.use_cases.utils import (
     get_missing_outdated_clients,
     save_error,
@@ -15,13 +16,41 @@ from invoice_synchronizer.application.use_cases.utils import (
 )
 
 
-class InvoicesProcessReport(BaseModel):
+class SynchroinzationType(str, Enum):
+    """Synchronization type."""
+    CLIENTS = "clients"
+    PRODUCTS = "products"
+    INVOICES = "invoices"
+
+
+class OperationType(str, Enum):
+    """Operation type for synchronization."""
+    CREATING = "creating"
+    UPDATING = "updating"
+
+
+SynchronizationModels = Union[User, Product, Invoice]
+
+
+class DetectedError(BaseModel):
+    """Detected error model."""
+
+    type_op: OperationType
+    error: str
+    error_date: datetime
+
+
+class ProcessReport(BaseModel):
     """Process specific invoices model."""
 
-    error_missing_invoices: List[Invoice] = []
-    error_outdated_invoices: List[Invoice] = []
-    finished_invoices: List[Invoice] = []
-    ref_invoices: List[Invoice] = []
+    synchronization_type: SynchroinzationType
+    start_date: datetime
+    end_date: datetime
+    iterations: int
+    error_missing: List[DetectedError] = []
+    error_outdated: List[DetectedError] = []
+    finished: List[SynchronizationModels] = []
+    ref: List[SynchronizationModels] = []
 
 
 class Updater:

@@ -43,10 +43,16 @@ def user_to_siigo_payload(client: User, contacts: Optional[Any] = None) -> Dict[
     state_code = str(client.city_detail.state_code)
     state_code = state_code if len(state_code) > 1 else f"0{state_code}"
 
-    contacts_info = (
-        contacts
-        if contacts
-        else [
+    if contacts and isinstance(contacts, list) and len(contacts) > 0:
+        contacts[0]["email"] = client.email
+        contacts[0]["phone"] = {
+            "indicative": "",
+            "number": client.phone[0:10],
+            "extension": "",
+        }
+        contacts_info = contacts
+    else:
+        contacts_info = [
             {
                 "first_name": name,
                 "last_name": last_name,
@@ -58,7 +64,7 @@ def user_to_siigo_payload(client: User, contacts: Optional[Any] = None) -> Dict[
                 },
             }
         ]
-    )
+
     address = re.sub(r"[^a-zA-Z0-9 ]", "", client.address)
     payload = {
         "type": "Customer",

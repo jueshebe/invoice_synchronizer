@@ -1,0 +1,46 @@
+[
+    {
+        "type_op": "Updating",
+        "client": {
+            "name": "moreno polania",
+            "last_name": "luis adriano",
+            "document_type": 13,
+            "document_number": 17339453,
+            "check_digit": 1,
+            "city_detail": {
+                "city_name": "Villavicencio",
+                "city_state": "Meta",
+                "city_code": "50001",
+                "country_code": "Co",
+                "state_code": "50"
+            },
+            "responsibilities": "R-99-PN",
+            "email": "facturacionadriano@hotmail.com",
+            "phone": "3102830171",
+            "address": ""
+        },
+        "error": "Can't update Siigo client\n {\"Status\":400,\"Errors\":[{\"Code\":\"invalid_email\",\"Message\":\"Invalid email: \",\"Params\":[\"contacts[0].email\"],\"Detail\":\"Check the API documentation: https://developer.siigo.com/introduction/codigos-de-error/invalid_email\"}]}"
+    },
+    {
+        "type_op": "Updating",
+        "client": {
+            "name": "moreno polania",
+            "last_name": "luis adriano",
+            "document_type": 13,
+            "document_number": 17339453,
+            "check_digit": 1,
+            "city_detail": {
+                "city_name": "Villavicencio",
+                "city_state": "Meta",
+                "city_code": "50001",
+                "country_code": "Co",
+                "state_code": "50"
+            },
+            "responsibilities": "R-99-PN",
+            "email": "facturacionadriano@hotmail.com",
+            "phone": "3102830171",
+            "address": ""
+        },
+        "error": "Can't update Siigo client\n {\"Status\":400,\"Errors\":[{\"Code\":\"invalid_email\",\"Message\":\"Invalid email: \",\"Params\":[\"contacts[0].email\"],\"Detail\":\"Check the API documentation: https://developer.siigo.com/introduction/codigos-de-error/invalid_email\"}]}"
+    }
+]
