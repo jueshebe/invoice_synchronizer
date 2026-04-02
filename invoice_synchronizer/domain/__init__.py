@@ -24,6 +24,13 @@ from invoice_synchronizer.domain.errors.errors import (
     ParseDataError,
 )
 
+from invoice_synchronizer.domain.synchronization.synchronization import (
+    DetectedError,
+    SynchronizationType,
+    SynchronizationModels,
+    OperationType,
+)
+
 __all__ = [
     "Payment",
     "InvoiceId",
@@ -44,4 +51,8 @@ __all__ = [
     "UploadError",
     "UpdateError",
     "ParseDataError",
+    "DetectedError",
+    "SynchronizationType",
+    "SynchronizationModels",
+    "OperationType",
 ]

@@ -1,6 +1,11 @@
 documents/
 /errors/
 __pycache__
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
 .DS_Store
 errores_clientes.json
 *.xlsx
@@ -20,3 +25,4 @@ poetry.lock
 invoices_error.json
 notebooks/
 .ipynb_checkpoints/
+pyrightconfig.json

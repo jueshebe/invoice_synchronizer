@@ -1,6 +1,6 @@
 [MASTER]
 # Use the Python executable from the virtual environment
-init-hook="import sys; sys.path.insert(0, '/Users/julianherrera/apps/asadero/pirpos-clean-arch')"
+init-hook="import sys; sys.path.insert(0, '/Users/julianherrera/apps/asadero/pirpos2siigo')"
 
 # Add files or folders to the blacklist. They should be base names, not paths.
 ignore=CVS,.git,__pycache__,.pytest_cache,tests
@@ -21,12 +21,13 @@ max-line-length=100
 # C0115: Missing class docstring  
 # C0116: Missing function docstring
 # R0903: Too few public methods
+# W0718: Catching too general exception (broad-exception-caught)
 # Disable expensive/slow checks:
 # R0801: Similar lines in files (very slow)
 # R0902: Too many instance attributes
 # R0913: Too many arguments
 # R0914: Too many local variables
-disable=C0114,C0115,C0116,R0903,no-name-in-module,R0801,R0902,R0913,R0914
+disable=C0114,C0115,C0116,R0903,no-name-in-module,R0801,R0902,R0913,R0914,W0718
 
 [TYPECHECK]
 # List of module names for which member attributes should not be checked
