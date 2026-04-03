@@ -11,6 +11,7 @@ from invoice_synchronizer.domain import (
     User,
     Product,
     Invoice,
+    InvoiceId,
     InvoiceStatus,
     AuthenticationError,
     FetchDataError,
@@ -63,6 +64,7 @@ class SiigoConnector(PlatformConnector):
         self.__productid_to_siigo_id: Dict[str, str] = {}
         self.__invoice_number_to_siigo_id: Dict[str, str] = {}
         self.__invoice_id_to_credit_note_acentry_id: Dict[str, str] = {}
+        self.invoice_id_to_credit_note_name: Dict[InvoiceId, str] = {}
         logger.info("Siigo connector initialized.")
 
     def __get_siigo_access_token(self) -> str:
@@ -525,10 +527,11 @@ class SiigoConnector(PlatformConnector):
                     break
                 else:
                     url = next_link
-        invoices, invoice_id_to_credit_note_id = update_invoices_with_credit_notes(
+        invoices, invoice_id_to_credit_note_id, domain_id_to_credit_note_name = update_invoices_with_credit_notes(
             invoices_by_id, credit_note_data, credit_note_doc_name_acentry
         )
         self.__invoice_id_to_credit_note_acentry_id.update(invoice_id_to_credit_note_id)
+        self.invoice_id_to_credit_note_name.update(domain_id_to_credit_note_name)
         return invoices
 
     def get_credit_note_acentryid(self, init_day: datetime, end_day: datetime) -> Dict[str, str]:

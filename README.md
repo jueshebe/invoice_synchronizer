@@ -205,15 +205,18 @@ synchronizer = InvoiceSynchronizer()
 # Synchronize all data
 def sync_everything():
     # 1. Synchronize products
-    synchronizer.update_products()
+    products_report = synchronizer.update_products()
+    print(f"Products synced: {len(products_report.finished)}, Errors: {len(products_report.errors)}")
     
     # 2. Synchronize clients
-    synchronizer.update_clients()
+    clients_report = synchronizer.update_clients()
+    print(f"Clients synced: {len(clients_report.finished)}, Errors: {len(clients_report.errors)}")
     
     # 3. Synchronize invoices for a specific range
     start_date = datetime(2026, 1, 1)
     end_date = datetime(2026, 1, 31)
-    synchronizer.update_invoices(start_date, end_date, iterations=5)
+    invoices_report = synchronizer.update_invoices(start_date, end_date, iterations=5)
+    print(f"Invoices synced: {len(invoices_report.finished)}, Errors: {len(invoices_report.errors)}")
 
 # Execute synchronization
 sync_everything()
@@ -236,14 +239,17 @@ synchronizer.update_invoices(start_date, end_date, iterations=3)
 
 ```python
 # Products only
-synchronizer.update_products()
+products_report = synchronizer.update_products()
+print(f"Products synced: {len(products_report.finished)}, Errors: {len(products_report.errors)}")
 
 # Clients only
-synchronizer.update_clients()
+clients_report = synchronizer.update_clients()
+print(f"Clients synced: {len(clients_report.finished)}, Errors: {len(clients_report.errors)}")
 
 # Invoices from a specific day only
 specific_date = datetime(2026, 1, 25)
-synchronizer.update_invoices(specific_date, specific_date, iterations=1)
+invoices_report = synchronizer.update_invoices(specific_date, specific_date, iterations=1)
+print(f"Invoices synced: {len(invoices_report.finished)}, Errors: {len(invoices_report.errors)}")
 ```
 
 ### Complete Example
@@ -264,17 +270,20 @@ def main():
         
         # Synchronize products and clients
         print("Synchronizing products...")
-        synchronizer.update_products()
+        products_report = synchronizer.update_products()
+        print(f"  Products: {len(products_report.finished)} synced, {len(products_report.errors)} errors")
         
         print("Synchronizing clients...")
-        synchronizer.update_clients()
+        clients_report = synchronizer.update_clients()
+        print(f"  Clients: {len(clients_report.finished)} synced, {len(clients_report.errors)} errors")
         
         # Synchronize invoices from the last week
         end_date = datetime.now()
         start_date = end_date - timedelta(days=7)
         
         print(f"Synchronizing invoices from {start_date.date()} to {end_date.date()}")
-        synchronizer.update_invoices(start_date, end_date, iterations=5)
+        invoices_report = synchronizer.update_invoices(start_date, end_date, iterations=5)
+        print(f"  Invoices: {len(invoices_report.finished)} synced, {len(invoices_report.errors)} errors")
         
         print("✅ Synchronization completed successfully")
         
@@ -310,20 +319,22 @@ from datetime import datetime
 start_date = datetime(2026, 1, 1)
 end_date = datetime(2026, 1, 31)
 
-# This returns a InvoicesProcessReport object with failed invoices
-error_invoices = synchronizer.update_invoices(start_date, end_date, iterations=5)
+# This returns a ProcessReport object with synchronization results
+report = synchronizer.update_invoices(start_date, end_date, iterations=5)
 
 # Save errors to file for later processing
-if error_invoices.error_missing_invoices or error_invoices.error_outdated_invoices:
-    print("There were errors updating the following invoices:")
-    with open("error_invoices.json", "w", encoding="utf-8") as error_file:
-        error_file.write(error_invoices.model_dump_json(indent=4))
+if report.errors:
+    print("There were errors during synchronization:")
+    with open("error_report.json", "w", encoding="utf-8") as error_file:
+        error_file.write(report.model_dump_json(indent=4))
     
-    print(f"❌ {len(error_invoices.error_missing_invoices)} missing invoices")
-    print(f"❌ {len(error_invoices.error_outdated_invoices)} outdated invoices")
-    print("📁 Error details saved to 'error_invoices.json'")
+    print(f"✅ {len(report.finished)} invoices synchronized successfully")
+    print(f"❌ {len(report.errors)} errors occurred")
+    print(f"📊 {len(report.ref)} total reference invoices")
+    print("📁 Full report saved to 'error_report.json'")
 else:
     print("✅ All invoices synchronized successfully!")
+    print(f"📊 Total: {len(report.finished)} invoices")
 ```
 
 ### Simple Error Recovery
@@ -333,39 +344,64 @@ For a quick retry of failed invoices, use this simple approach:
 ```python
 import json
 from invoice_synchronizer import InvoiceSynchronizer
-from invoice_synchronizer.application import InvoicesProcessReport
+from invoice_synchronizer.application import ProcessReport
 
-# Load failed invoices and retry
+# Load previous report with errors and retry
 synchronizer = InvoiceSynchronizer()
 
-with open("error_invoices.json", "r", encoding="utf-8") as f:
+with open("error_report.json", "r", encoding="utf-8") as f:
     data = json.load(f)
-    failed_invoices = InvoicesProcessReport(**data)
+    previous_report = ProcessReport(**data)
 
-# Process only the failed invoices
-result = synchronizer.update_specific_invoices(failed_invoices)
-print(f"Remaining errors: {len(result.error_missing_invoices + result.error_outdated_invoices)}")
+# Retry only the failed items from the previous report
+result = synchronizer.update_specific_invoices(previous_report)
+print(f"Previous errors: {len(previous_report.errors)}")
+print(f"Remaining errors: {len(result.errors)}")
+print(f"Successfully recovered: {len(previous_report.errors) - len(result.errors)}")
 ```
 
-### Error File Structure
+### ProcessReport Structure
 
-The error file contains:
+The ProcessReport contains the following information:
+
 ```json
 {
-    "error_missing_invoices": [
+    "synchronization_type": "invoices",
+    "start_date": "2026-01-01T00:00:00",
+    "end_date": "2026-01-31T23:59:59",
+    "iterations": 5,
+    "errors": [
         {
-            "client": {...},
-            "invoice_id": {...},
-            "payments": [...],
-            "order_items": [...],
-            "total": 150000.0,
-            "status": "PAID"
+            "type_op": "creating",
+            "error": "Connection timeout",
+            "error_date": "2026-01-15T10:30:00",
+            "failed_model": {
+                "client": {...},
+                "invoice_id": {...},
+                "payments": [...],
+                "order_items": [...],
+                "total": 150000.0,
+                "status": "PAID"
+            }
         }
     ],
-    "error_outdated_invoices": [...],
-    "finished_invoices": [...]
+    "finished": [
+        // Successfully synchronized items
+    ],
+    "ref": [
+        // All reference items from source system
+    ]
 }
 ```
+
+**Fields:**
+- `synchronization_type`: Type of sync ("clients", "products", or "invoices")
+- `start_date`: When the synchronization started
+- `end_date`: When the synchronization ended
+- `iterations`: Number of iterations performed
+- `errors`: List of DetectedError objects with failed operations
+- `finished`: Items that were successfully synchronized
+- `ref`: All reference items from the source system
 
 ## 🛠️ Development Commands
 

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "invoice_synchronizer"
-version = "3.1.0.dev5"
+version = "3.1.0"
 description = "Invoice synchronization library between Loggro and Siigo platforms"
 authors = ["JulianEstebanHerrera"]
 readme = "README.md"
@@ -22,7 +22,7 @@ classifiers = [
 packages = [{ include = "invoice_synchronizer" }]
 
 [tool.poetry.dependencies]
-python = "^3.10,<3.11"
+python = ">=3.11,<3.12"
 requests = "^2.28.0"
 Unidecode = "^1.3.4"
 lxml = "^4.9.0"
@@ -40,6 +40,8 @@ pylint = "^4.0.3"
 twine = "^6.2.0"
 wheel = "^0.46.3"
 setuptools = "^80.10.2"
+jupyterlab = "^4.5.4"
+pandas = "^3.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
