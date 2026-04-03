@@ -1,9 +1,12 @@
 """utils for services."""
 
-from typing import List, Tuple, Dict
-from os import path
-import json
+from typing import List, Tuple
 from invoice_synchronizer.domain import User, Product, Invoice
+from invoice_synchronizer.domain.synchronization.synchronization import (
+    SynchronizationType,
+    OperationType,
+)
+from invoice_synchronizer.application.use_cases.updater.dto import ProcessReport
 
 
 def get_missing_outdated_clients(
@@ -131,24 +134,37 @@ def get_missing_outdated_invoices(
     return (missing_invoices, outdated_invoices, must_be_deleted_invoices)
 
 
-def save_error(error_data: Dict[str, str], file_name: str) -> None:
-    """Save error on json file."""
-    if path.exists(file_name):
-        with open(file_name, "r", encoding="utf-8") as json_file:
-            clients_errors: List[Dict[str, str]] = json.load(json_file)
-    else:
-        clients_errors = []
+def get_failed_invoices(process_report: ProcessReport) -> Tuple[List[Invoice], List[Invoice], List[Invoice]]:
+    """Get failed invoices.
 
-    # save error
-    clients_errors.append(error_data)
+    Parameters
+    ----------
+    process_report : ProcessReport
+        Process report with errors.
 
-    with open(file_name, "w", encoding="utf-8") as json_file:
-        json_file.write(json.dumps(clients_errors, indent=4))
+    Returns
+    -------
+    Tuple[List[Invoice], List[Invoice], List[Invoice]]
+        Failed invoices by creation, updating, and reference invoices.
+    """
+    # Confirm it's an invoice synchronization
+    if process_report.synchronization_type != SynchronizationType.INVOICES:
+        raise ValueError(
+            f"Expected INVOICES synchronization type, got {process_report.synchronization_type}"
+        )
 
+    failed_creating: List[Invoice] = []
+    failed_updating: List[Invoice] = []
 
-if __name__ == "__main__":
-    error_data_test = {"ke4": "1", "prueba": "error"}
-    exception_test = KeyError("some error")
-    FILE_NAME = "test_error.json"
+    for error in process_report.errors:
+        # Check if failed_model is an Invoice
+        if isinstance(error.failed_model, Invoice):
+            if error.type_op == OperationType.CREATING:
+                failed_creating.append(error.failed_model)
+            elif error.type_op == OperationType.UPDATING:
+                failed_updating.append(error.failed_model)
 
-    save_error(error_data_test, FILE_NAME)
+    # Filter ref to get only invoices
+    ref_invoices = [item for item in process_report.ref if isinstance(item, Invoice)]
+
+    return (failed_creating, failed_updating, ref_invoices)

@@ -33,9 +33,9 @@ class PirposConfig(BaseModel):
 
     pirpos_username: str
     pirpos_password: str
-    batch_size: int = 200
+    batch_size: int = 100
     default_user: User
-    timeout: int = 30
+    timeout: int = 60
     system_mapping: SystemParameters
 
 
@@ -45,7 +45,7 @@ class SiigoConfig(BaseModel):
     siigo_username: str
     siigo_access_key: str
     default_user: User
-    timeout: int = 30
+    timeout: int = 60
     system_mapping: SystemParameters
     retentions: List[int] = []
     credit_note_id: int
@@ -82,7 +82,7 @@ class SystemConfig:
         pirpos_config = PirposConfig(
             pirpos_username=os.environ["PIRPOS_USER_NAME"],
             pirpos_password=os.environ["PIRPOS_PASSWORD"],
-            batch_size=int(os.environ.get("PIRPOS_BATCH_SIZE", 200)),
+            batch_size=int(os.environ.get("PIRPOS_BATCH_SIZE", 100)),
             default_user=self.default_user,
             system_mapping=self.system_config,
         )
